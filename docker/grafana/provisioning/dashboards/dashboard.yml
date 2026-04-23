@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: "Multi-Org Monitoring"
+    orgId: 1
+    folder: "Sidroid Monitoring"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
