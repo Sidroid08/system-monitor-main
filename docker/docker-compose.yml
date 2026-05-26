@@ -1,0 +1,60 @@
+
+services:
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.121.0
+    container_name: victoriametrics
+    restart: unless-stopped
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm_data:/victoria-metrics-data
+    command:
+      - "-storageDataPath=/victoria-metrics-data"
+      - "-retentionPeriod=12"
+      - "-httpListenAddr=:8428"
+      - "-search.maxQueryDuration=30s"
+      - "-selfScrapeInterval=30s"
+
+  vmagent:
+    image: victoriametrics/vmagent:v1.121.0
+    container_name: vmagent
+    restart: unless-stopped
+    depends_on:
+      - victoriametrics
+    ports:
+      - "8429:8429"
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+    volumes:
+      - ../configs/vmagent_config.yml:/etc/vmagent/vmagent.yml:ro
+      - ../configs/prometheus_scrape_example.yml:/etc/vmagent/prometheus_scrape_example.yml:ro
+    command:
+      - "-promscrape.config=/etc/vmagent/vmagent.yml"
+      - "-remoteWrite.url=http://victoriametrics:8428/api/v1/write"
+      - "-httpListenAddr=:8429"
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - victoriametrics
+    ports:
+      - "3005:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: victoriametrics-metrics-datasource
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/grafana_dashboard.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../dashboards:/var/lib/grafana/dashboards:ro
+
+
+volumes:
+  vm_data:
+  grafana_data:

@@ -1,0 +1,196 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                 String              @id @default(uuid()) @db.VarChar(191)
+  name               String
+  slug               String              @unique @db.VarChar(191)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  users              User[]
+  awsAccounts        AwsAccount[]
+  monitoredInstances MonitoredInstance[]
+  apiKeys            ApiKey[]
+  alerts             Alert[]
+  alertRules         AlertRule[]
+
+  @@map("organizations")
+}
+
+model User {
+  id              String         @id @default(uuid()) @db.VarChar(191)
+  organizationId  String         @db.VarChar(191)
+  name            String
+  email           String         @unique @db.VarChar(191)
+  passwordHash    String
+  role            UserRole       @default(VIEWER)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model AwsAccount {
+  id              String         @id @default(uuid()) @db.VarChar(191)
+  organizationId  String         @db.VarChar(191)
+  accountName     String
+  accountId       String         @unique @db.VarChar(191)
+  region          String
+  accessKeyId     String?
+  secretAccessKey String?
+  roleArn         String?
+  externalId      String?
+  authMode        AwsAuthMode    @default(STATIC_KEYS)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  monitoredInstances MonitoredInstance[]
+
+  @@index([organizationId])
+  @@map("aws_accounts")
+}
+
+model MonitoredInstance {
+  id                String          @id @default(uuid()) @db.VarChar(191)
+  organizationId    String          @db.VarChar(191)
+  awsAccountId      String?         @db.VarChar(191)
+  instanceId        String          @db.VarChar(191)
+  instanceName      String?
+  hostname          String?
+  privateIp         String?
+  publicIp          String?
+  platform          PlatformType    @default(LINUX)
+  serviceType       ServiceType     @default(EC2)
+  region            String?
+  status            InstanceStatus  @default(RUNNING)
+  orgLabel          String?
+  serviceLabel      String?
+  exporterPort      Int?
+  lastSeenAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccount        AwsAccount?     @relation(fields: [awsAccountId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([awsAccountId])
+  @@unique([organizationId, instanceId])
+  @@map("monitored_instances")
+}
+
+model ApiKey {
+  id              String        @id @default(uuid()) @db.VarChar(191)
+  organizationId  String        @db.VarChar(191)
+  name            String
+  keyHash         String
+  isActive        Boolean       @default(true)
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("api_keys")
+}
+
+model Alert {
+  id                String         @id @default(uuid()) @db.VarChar(191)
+  organizationId    String         @db.VarChar(191)
+  title             String
+  description       String?
+  severity          AlertSeverity  @default(MEDIUM)
+  source            String?
+  metricName        String?
+  instanceId        String?        @db.VarChar(191)
+  status            AlertStatus    @default(OPEN)
+  triggeredAt       DateTime       @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("alerts")
+}
+
+model AlertRule {
+  id                String         @id @default(uuid()) @db.VarChar(191)
+  organizationId    String         @db.VarChar(191)
+  instanceId        String         @db.VarChar(191) // specific instanceId or 'ALL'
+  metric            String         // 'cpu', 'memory', 'disk'
+  threshold         Float
+  alertType         String         @default("BOTH") // 'CUSTOM', 'GRAFANA', 'BOTH'
+  emails            String         @db.Text
+  repeatInterval    Int            @default(300)    // seconds between repeated alert emails (20–3600)
+  grafanaRuleUid    String?        @db.VarChar(191)
+  grafanaContactUid String?        @db.VarChar(191)
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+
+  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("alert_rules")
+}
+
+
+enum UserRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum AwsAuthMode {
+  STATIC_KEYS
+  ASSUME_ROLE
+}
+
+enum PlatformType {
+  LINUX
+  WINDOWS
+}
+
+enum ServiceType {
+  EC2
+  VM
+  BARE_METAL
+  CONTAINER
+}
+
+enum InstanceStatus {
+  RUNNING
+  STOPPED
+  TERMINATED
+  UNKNOWN
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}

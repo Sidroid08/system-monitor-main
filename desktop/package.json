@@ -1,0 +1,40 @@
+{
+  "name": "cloud-ventur-desktop",
+  "version": "1.0.0",
+  "description": "Cloud Ventur Dashboard Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Sidroid",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.8"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.cloudventur.dashboard",
+    "productName": "Cloud Ventur Dashboard",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "main.js",
+      "next-app/**/*",
+      "node_modules/**/*"
+    ]
+  }
+}

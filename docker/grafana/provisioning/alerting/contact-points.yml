@@ -1,0 +1,9 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: email-receiver
+    receivers:
+      - uid: email_1
+        type: email
+        settings:
+          addresses: "agarwalh2904@gmail.com"

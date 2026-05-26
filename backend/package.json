@@ -1,0 +1,32 @@
+{
+  "name": "sidroid-phase1-backend",
+  "version": "1.0.0",
+  "description": "Phase 1 control plane backend for Sidroid multi-organization monitoring",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "lint": "node --check src/server.js",
+    "sync": "node scripts/manualSync.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.840.0",
+    "axios": "^1.7.2",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.0",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.8",
+    "prisma": "^5.22.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

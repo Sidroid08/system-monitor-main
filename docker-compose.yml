@@ -1,0 +1,185 @@
+version: "3.8"
+
+services:
+  # Next.js Dashboard Frontend
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8766/api
+        NEXT_PUBLIC_VICTORIA_METRICS_URL: http://localhost:8767
+        NEXT_PUBLIC_GRAFANA_URL: http://localhost:8769
+        NEXT_PUBLIC_APP_URL: http://localhost:8765
+    container_name: cloud-ventur-dashboard
+    ports:
+      - "8765:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8766/api
+      NEXT_PUBLIC_VICTORIA_METRICS_URL: http://localhost:8767
+      INTERNAL_API_URL: http://cloud-ventur-backend:5000/api
+      INTERNAL_VICTORIA_METRICS_URL: http://victoriametrics:8428
+      INTERNAL_GRAFANA_URL: http://cloud-ventur-grafana:3000
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: your-secret-key-change-in-production
+      NODE_ENV: production
+    depends_on:
+      - backend
+      - redis
+      - grafana
+    networks:
+      - sidroid
+    restart: unless-stopped
+
+  # Express Backend (already running, included for reference)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cloud-ventur-backend
+    ports:
+      - "8766:5000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://root:password@mysql:3306/sidroid
+      JWT_SECRET: your-jwt-secret-change-in-production
+      CORS_ORIGIN: http://localhost:8765
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sidroid
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cloud-ventur-redis
+    ports:
+      - "8770:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - sidroid
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: cloud-ventur-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: sidroid
+    ports:
+      - "8771:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - sidroid
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # VictoriaMetrics (Metrics Storage)
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: cloud-ventur-victoriametrics
+    ports:
+      - "8767:8428"
+    volumes:
+      - victoriametrics_data:/victoria-metrics-data
+    command:
+      - "--storageDataPath=/victoria-metrics-data"
+      - "--retentionPeriod=8760h"
+    networks:
+      - sidroid
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8428/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # vmagent (Metrics Collector)
+  vmagent:
+    image: victoriametrics/vmagent:latest
+    container_name: cloud-ventur-vmagent
+    ports:
+      - "8768:8429"
+    volumes:
+      - ./configs/vmagent_config.yml:/etc/vmagent/scrape.yml
+    command:
+      - "--promscrape.config=/etc/vmagent/scrape.yml"
+      - "--remoteWrite.url=http://victoriametrics:8428/api/v1/write"
+    depends_on:
+      - victoriametrics
+    networks:
+      - sidroid
+    restart: unless-stopped
+
+  # Grafana (Optional, for comparison/backup)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cloud-ventur-grafana
+    ports:
+      - "8769:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: "X-Sidroid-User"
+      GF_AUTH_PROXY_HEADER_PROPERTY: "username"
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Admin"
+      GF_SERVER_ROOT_URL: "http://localhost:8765/api/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: "smtp.gmail.com:587"
+      GF_SMTP_USER: "agarwalh2904@gmail.com"
+      GF_SMTP_PASSWORD: "dhtv etzh wghh rayp"
+      GF_SMTP_FROM_ADDRESS: "agarwalh2904@gmail.com"
+      GF_SMTP_FROM_NAME: "Sidroid Monitoring"
+      GF_SMTP_STARTTLS_POLICY: "MandatoryStartTLS"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - victoriametrics
+    networks:
+      - sidroid
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  mysql_data:
+    driver: local
+  victoriametrics_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  sidroid:
+    driver: bridge
