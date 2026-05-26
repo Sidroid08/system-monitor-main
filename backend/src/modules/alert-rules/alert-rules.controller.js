@@ -240,7 +240,7 @@ export async function createAlertRule(req, res) {
         ],
         execErrState: 'Alerting',
         noDataState: 'NoData',
-        for: '0s',
+        for: '1m',
         labels: {
           severity: 'critical',
           sidroid_rule_id: rule.id,  // Used by notification policy routing
@@ -272,11 +272,11 @@ export async function createAlertRule(req, res) {
   }
 
   const updatedRule = await prisma.alertRule.findUnique({ where: { id: rule.id } });
-  return res.status(201).json({ 
-    success: true, 
-    data: updatedRule, 
+  return res.status(201).json({
+    success: true,
+    data: updatedRule,
     message: 'Alert rule created',
-    grafanaStatus 
+    grafanaStatus
   });
 }
 
