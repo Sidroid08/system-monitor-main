@@ -48,6 +48,22 @@ export async function updateInstanceStatus(req, res) {
 
 export async function deleteInstance(req, res) {
   const { id } = req.params;
+  
+  // 1. Find all rules associated with this instance
+  const rules = await prisma.alertRule.findMany({ where: { instanceId: id } });
+  
+  // Dynamic imports to avoid circular dependencies
+  const alertCtrl = await import('../alert-rules/alert-rules.controller.js');
+  const alertEval = await import('../../workers/alertEvaluator.js');
+  
+  for (const rule of rules) {
+    alertEval.clearCooldown(rule.id);
+    await alertCtrl.removeGrafanaRule(rule);
+    await prisma.alertRule.delete({ where: { id: rule.id } });
+  }
+
+  // 2. Delete the instance itself
   await prisma.monitoredInstance.delete({ where: { id } });
   return ok(res, null, 'Instance permanently deleted');
 }
+

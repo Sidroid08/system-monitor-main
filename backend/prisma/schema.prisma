@@ -143,6 +143,7 @@ model AlertRule {
   grafanaRuleUid    String?        @db.VarChar(191)
   grafanaContactUid String?        @db.VarChar(191)
   isActive          Boolean        @default(true)
+  isPaused          Boolean        @default(false)  // pause without deleting
   createdAt         DateTime       @default(now())
 
   organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -150,6 +151,7 @@ model AlertRule {
   @@index([organizationId])
   @@map("alert_rules")
 }
+
 
 
 enum UserRole {

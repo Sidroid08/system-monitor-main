@@ -114,7 +114,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\", organization_id=~\"$organization\"}[5m])) * 100)",
+          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\", organization_id=~\"$organization\", instance=~\"$instance\"}[5m])) * 100)",
           "instant": false,
           "legendFormat": "Linux: {{instance}}",
           "range": true,
@@ -126,7 +126,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(windows_cpu_time_total{mode=\"idle\", organization_id=~\"$organization\"}[5m])) * 100)",
+          "expr": "100 - (avg by (instance) (rate(windows_cpu_time_total{mode=\"idle\", organization_id=~\"$organization\", instance=~\"$instance\"}[5m])) * 100)",
           "instant": false,
           "legendFormat": "Windows: {{instance}}",
           "range": true,
@@ -222,7 +222,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "100 - ((node_memory_MemAvailable_bytes{organization_id=~\"$organization\"} / node_memory_MemTotal_bytes{organization_id=~\"$organization\"}) * 100)",
+          "expr": "100 - ((node_memory_MemAvailable_bytes{organization_id=~\"$organization\", instance=~\"$instance\"} / node_memory_MemTotal_bytes{organization_id=~\"$organization\", instance=~\"$instance\"}) * 100)",
           "instant": false,
           "legendFormat": "Linux: {{instance}}",
           "range": true,
@@ -234,7 +234,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "(1 - (windows_memory_available_bytes{organization_id=~\"$organization\"} / windows_memory_physical_total_bytes{organization_id=~\"$organization\"})) * 100",
+          "expr": "(1 - (windows_memory_available_bytes{organization_id=~\"$organization\", instance=~\"$instance\"} / windows_memory_physical_total_bytes{organization_id=~\"$organization\", instance=~\"$instance\"})) * 100",
           "instant": false,
           "legendFormat": "Windows: {{instance}}",
           "range": true,
@@ -251,8 +251,8 @@
       "id": 3,
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "100 - ((node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\",organization_id=~\"$organization\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\",organization_id=~\"$organization\"}) * 100)", "legendFormat": "Linux: {{instance}}", "range": true, "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "100 - ((windows_logical_disk_free_bytes{volume!~\"HarddiskVolume.*\",organization_id=~\"$organization\"} / windows_logical_disk_size_bytes{volume!~\"HarddiskVolume.*\",organization_id=~\"$organization\"}) * 100)", "legendFormat": "Windows: {{instance}}", "range": true, "refId": "B" }
+        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "100 - ((node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\",organization_id=~\"$organization\",instance=~\"$instance\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\",organization_id=~\"$organization\",instance=~\"$instance\"}) * 100)", "legendFormat": "Linux: {{instance}}", "range": true, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "100 - ((windows_logical_disk_free_bytes{volume!~\"HarddiskVolume.*\",organization_id=~\"$organization\",instance=~\"$instance\"} / windows_logical_disk_size_bytes{volume!~\"HarddiskVolume.*\",organization_id=~\"$organization\",instance=~\"$instance\"}) * 100)", "legendFormat": "Windows: {{instance}}", "range": true, "refId": "B" }
       ],
       "title": "Disk Usage (%)", "type": "timeseries"
     },
@@ -263,8 +263,8 @@
       "id": 4,
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*\",organization_id=~\"$organization\"}[5m])", "legendFormat": "Linux: {{instance}}", "range": true, "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(windows_net_bytes_received_total{organization_id=~\"$organization\"}[5m])", "legendFormat": "Windows: {{instance}}", "range": true, "refId": "B" }
+        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*\",organization_id=~\"$organization\",instance=~\"$instance\"}[5m])", "legendFormat": "Linux: {{instance}}", "range": true, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(windows_net_bytes_received_total{organization_id=~\"$organization\",instance=~\"$instance\"}[5m])", "legendFormat": "Windows: {{instance}}", "range": true, "refId": "B" }
       ],
       "title": "Network In", "type": "timeseries"
     },
@@ -275,8 +275,8 @@
       "id": 5,
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*\",organization_id=~\"$organization\"}[5m])", "legendFormat": "Linux: {{instance}}", "range": true, "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(windows_net_bytes_sent_total{organization_id=~\"$organization\"}[5m])", "legendFormat": "Windows: {{instance}}", "range": true, "refId": "B" }
+        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*\",organization_id=~\"$organization\",instance=~\"$instance\"}[5m])", "legendFormat": "Linux: {{instance}}", "range": true, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "victoriametrics" }, "editorMode": "code", "expr": "rate(windows_net_bytes_sent_total{organization_id=~\"$organization\",instance=~\"$instance\"}[5m])", "legendFormat": "Windows: {{instance}}", "range": true, "refId": "B" }
       ],
       "title": "Network Out", "type": "timeseries"
     }
@@ -309,6 +309,33 @@
         "query": ".*",
         "skipUrlSync": false,
         "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "definition": "label_values(node_uname_info, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(up, instance)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
@@ -320,5 +347,5 @@
   "timezone": "browser",
   "title": "Multi-Organization AWS Node Monitoring",
   "uid": "multi-org-aws-monitoring",
-  "version": 1
+  "version": 2
 }

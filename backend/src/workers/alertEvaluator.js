@@ -97,6 +97,15 @@ function formatIntervalLabel(seconds) {
 // Per-rule cooldown tracker: ruleId -> timestamp of last fired email (ms)
 const lastFiredMap = new Map();
 
+/**
+ * Immediately clear the cooldown for a rule (called on delete or pause).
+ * This ensures emails stop sending within the next 20s poll cycle.
+ */
+export function clearCooldown(ruleId) {
+  lastFiredMap.delete(ruleId);
+  console.log(`[AlertEvaluator] Cooldown cleared for rule ${ruleId}`);
+}
+
 export function startAlertEvaluator() {
   console.log('✅ Starting Sidroid Custom Alert Evaluator (runs every 20 seconds, per-rule cooldown)');
 
@@ -106,6 +115,7 @@ export function startAlertEvaluator() {
       const rules = await prisma.alertRule.findMany({
         where: {
           isActive: true,
+          isPaused: false,   // skip paused rules — no emails when paused
           alertType: { in: ['CUSTOM', 'BOTH'] }
         },
         include: { organization: true }

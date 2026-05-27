@@ -202,6 +202,30 @@ export default function InstancesList({ organizationId, instances: propsInstance
     }
   };
 
+  const togglePauseRule = async (ruleId: string, currentIsPaused: boolean) => {
+    try {
+      const token = localStorage.getItem('auth_token') || '';
+      const action = currentIsPaused ? 'resume' : 'pause';
+      const res = await fetch(`/api/alert-rules/${ruleId}/${action}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!res.ok) {
+         throw new Error(`Failed to ${action} rule`);
+      }
+
+      addToast({ 
+        title: currentIsPaused ? '▶️ Rule Resumed' : '⏸️ Rule Paused', 
+        description: currentIsPaused ? 'Alerts will now fire again.' : 'Emails suspended until resumed.', 
+        type: 'success' 
+      });
+      fetchInstancesAndRules();
+    } catch (err: any) {
+      addToast({ title: 'Toggle Failed', description: err.message || 'Could not change pause state.', type: 'error' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="glass-card animate-fade-in" style={{ overflow: 'hidden' }}>
@@ -290,9 +314,12 @@ export default function InstancesList({ organizationId, instances: propsInstance
                               <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Configured Email Rules for {inst.instanceName || inst.id}</h4>
                               <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
                                 {instRules.map(rule => (
-                                  <div key={rule.id} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div key={rule.id} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: rule.isPaused ? 0.6 : 1 }}>
                                     <div>
-                                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>{rule.metric.toUpperCase()} &gt; {rule.threshold}%</div>
+                                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                        {rule.metric.toUpperCase()} &gt; {rule.threshold}% 
+                                        {rule.isPaused && <span style={{ marginLeft: 8, fontSize: '0.65rem', background: '#334155', padding: '2px 6px', borderRadius: 12 }}>⏸️ Paused</span>}
+                                      </div>
                                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>To: {rule.emails}</div>
                                       <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
                                         <span style={{ fontSize: '0.65rem', color: 'var(--accent)' }}>Engine: {rule.alertType}</span>
@@ -300,7 +327,12 @@ export default function InstancesList({ organizationId, instances: propsInstance
                                         <span style={{ fontSize: '0.65rem', color: 'var(--warning, #f97316)' }}>Every {formatRepeatInterval(rule.repeatInterval)}</span>
                                       </div>
                                     </div>
-                                    <button onClick={() => deleteRule(rule.id)} className="btn-ghost" style={{ color: 'var(--danger)', padding: '4px 8px' }}>🗑️ Delete</button>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                      <button onClick={() => togglePauseRule(rule.id, rule.isPaused)} className="btn-ghost" style={{ color: rule.isPaused ? 'var(--success)' : 'var(--warning)', padding: '4px 8px' }}>
+                                        {rule.isPaused ? '▶️ Resume' : '⏸️ Pause'}
+                                      </button>
+                                      <button onClick={() => deleteRule(rule.id)} className="btn-ghost" style={{ color: 'var(--danger)', padding: '4px 8px' }}>🗑️ Delete</button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>

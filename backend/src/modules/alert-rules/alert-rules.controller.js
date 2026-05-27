@@ -1,6 +1,7 @@
 import { ok } from '../../utils/apiResponse.js';
 import prisma from '../../lib/prisma.js';
 import axios from 'axios';
+import { clearCooldown } from '../../workers/alertEvaluator.js';
 
 const GRAFANA_URL = process.env.INTERNAL_GRAFANA_URL || 'http://cloud-ventur-grafana:3000';
 const GRAFANA_AUTH = Buffer.from('admin:admin123').toString('base64');
@@ -53,7 +54,17 @@ function buildPromQL(metric, instanceIp) {
 }
 
 /**
+ * Sleep for a given number of milliseconds.
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Create (or update) a Grafana email contact point for this alert rule.
+ * Retries up to 3 times with exponential backoff to handle Grafana's
+ * "could not find object using provided id and hash" race condition bug
+ * that occurs when multiple rules are created in rapid succession.
  * Returns the contact point UID.
  */
 async function createGrafanaContactPoint(emailList, ruleDbId) {
@@ -63,30 +74,53 @@ async function createGrafanaContactPoint(emailList, ruleDbId) {
     singleEmail: false,
   };
 
-  // Try to create, if it already exists update it
-  try {
-    const res = await grafana.post('/api/v1/provisioning/contact-points', {
-      name: cpName,
-      type: 'email',
-      settings,
-      disableResolveMessage: false,
-    });
-    console.log(`[Grafana] Contact point created: ${res.data.uid}`);
-    return res.data.uid;
-  } catch (e) {
-    // If it already exists (409), try to find it
-    if (e.response?.status === 409) {
-      const all = await grafana.get('/api/v1/provisioning/contact-points');
-      const existing = all.data.find(cp => cp.name === cpName);
-      if (existing) return existing.uid;
+  const maxAttempts = 3;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (attempt > 1) {
+        const backoffMs = attempt * 800;
+        console.log(`[Grafana] Retrying contact point creation (attempt ${attempt}/${maxAttempts}) after ${backoffMs}ms...`);
+        await sleep(backoffMs);
+      }
+
+      const res = await grafana.post('/api/v1/provisioning/contact-points', {
+        name: cpName,
+        type: 'email',
+        settings,
+        disableResolveMessage: false,
+      });
+      console.log(`[Grafana] Contact point created: ${res.data.uid}`);
+      return res.data.uid;
+    } catch (e) {
+      lastError = e;
+      const status = e.response?.status;
+      const errMsg = e.response?.data?.message || e.message || '';
+
+      if (status === 409) {
+        const all = await grafana.get('/api/v1/provisioning/contact-points');
+        const existing = all.data.find(cp => cp.name === cpName);
+        if (existing) {
+          console.log(`[Grafana] Contact point already exists, reusing UID: ${existing.uid}`);
+          return existing.uid;
+        }
+      }
+
+      if (status === 500 && errMsg.includes('could not find object')) {
+        console.warn(`[Grafana] Contact point creation hit race condition (attempt ${attempt}/${maxAttempts}): ${errMsg}`);
+        continue;
+      }
+
+      throw e;
     }
-    throw e;
   }
+
+  throw lastError;
 }
 
 /**
  * Convert seconds to a Grafana/Alertmanager duration string.
- * Minimum supported: 20s. Grafana requires group_interval >= group_wait.
  */
 function secondsToGrafanaDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
@@ -95,9 +129,7 @@ function secondsToGrafanaDuration(seconds) {
 }
 
 /**
- * Append a route to Grafana's notification policy tree that routes
- * alerts labelled with `sidroid_rule_id=<ruleDbId>` to the given contact point.
- * repeatIntervalSeconds controls how often Grafana re-sends the email while alert is firing.
+ * Append a route to Grafana's notification policy tree.
  */
 async function addNotificationRoute(ruleDbId, contactPointUid, repeatIntervalSeconds = 300) {
   try {
@@ -106,14 +138,12 @@ async function addNotificationRoute(ruleDbId, contactPointUid, repeatIntervalSec
 
     if (!policy.routes) policy.routes = [];
 
-    // Remove any stale route for this rule first
     policy.routes = policy.routes.filter(
       r => !(r.object_matchers || []).some(m => m[0] === 'sidroid_rule_id' && m[2] === ruleDbId)
     );
 
     const grafanaDuration = secondsToGrafanaDuration(repeatIntervalSeconds);
 
-    // Add the new route to the TOP so it takes precedence over default YAML provisioned routes
     policy.routes.unshift({
       receiver: `sidroid-rule-${ruleDbId}`,
       object_matchers: [['sidroid_rule_id', '=', ruleDbId]],
@@ -148,6 +178,103 @@ async function removeNotificationRoute(ruleDbId) {
   }
 }
 
+/**
+ * Fully remove a rule's Grafana alert rule + contact point + notification route.
+ * Safe to call even if UIDs are null.
+ */
+export async function removeGrafanaRule(rule) {
+  if (rule?.grafanaRuleUid) {
+    try {
+      await grafana.delete(`/api/v1/provisioning/alert-rules/${rule.grafanaRuleUid}`);
+      console.log(`[Grafana] Alert rule deleted: ${rule.grafanaRuleUid}`);
+    } catch (e) {
+      console.error('[Grafana] Failed to delete alert rule:', e?.response?.data || e.message);
+    }
+  }
+
+  if (rule?.grafanaContactUid) {
+    try {
+      await grafana.delete(`/api/v1/provisioning/contact-points/${rule.grafanaContactUid}`);
+      console.log(`[Grafana] Contact point deleted: ${rule.grafanaContactUid}`);
+    } catch (e) {
+      console.error('[Grafana] Failed to delete contact point:', e?.response?.data || e.message);
+    }
+  }
+
+  if (rule) await removeNotificationRoute(rule.id);
+}
+
+/**
+ * Provision a Grafana alert rule for the given DB rule object.
+ * Returns { grafanaRuleUid, grafanaContactUid } on success.
+ */
+async function provisionGrafanaRule(rule) {
+  const { metric, threshold, emails, repeatInterval, id } = rule;
+  const thresholdNum = parseFloat(threshold);
+  const repeatIntervalNum = Math.min(3600, Math.max(20, parseInt(repeatInterval) || 300));
+  const emailList = emails.split(',').map(e => e.trim()).filter(Boolean);
+
+  const instanceIp = await resolveInstanceIp(rule.instanceId);
+  const expr = buildPromQL(metric, instanceIp);
+  if (!expr) throw new Error(`Unknown metric: ${metric}`);
+
+  const grafanaContactUid = await createGrafanaContactPoint(emailList, id);
+
+  const metricLabel = { cpu: 'CPU Usage', memory: 'Memory Usage', disk: 'Disk Usage' }[metric] || metric;
+  const instanceLabel = instanceIp ? ` (${instanceIp})` : ' (All Instances)';
+
+  const grafanaPayload = {
+    title: `Sidroid_${metric.toUpperCase()}_${id.substring(0, 8)}`,
+    folderUID: GRAFANA_FOLDER_UID,
+    ruleGroup: 'SidroidRules',
+    condition: 'C',
+    data: [
+      {
+        refId: 'A',
+        datasourceUid: 'victoriametrics',
+        model: { expr, refId: 'A', instant: true },
+        relativeTimeRange: { from: 600, to: 0 }
+      },
+      {
+        refId: 'C',
+        datasourceUid: '__expr__',
+        model: {
+          conditions: [{
+            evaluator: { params: [thresholdNum], type: 'gt' },
+            operator: { type: 'and' },
+            query: { params: ['A'] },
+            reducer: { params: [], type: 'last' },
+            type: 'query'
+          }],
+          expression: 'A',
+          refId: 'C',
+          type: 'threshold'
+        }
+      }
+    ],
+    execErrState: 'Alerting',
+    noDataState: 'NoData',
+    for: '1m',
+    labels: {
+      severity: 'critical',
+      sidroid_rule_id: id,
+    },
+    annotations: {
+      summary: `${metricLabel}${instanceLabel} exceeded ${thresholdNum}%`,
+      description: `Sidroid alert: ${metricLabel} threshold of ${thresholdNum}% has been exceeded. Check your dashboard immediately.`,
+    }
+  };
+
+  const grafanaRes = await grafana.post('/api/v1/provisioning/alert-rules', grafanaPayload);
+  const grafanaRuleUid = grafanaRes.data.uid;
+  console.log(`[Grafana] Alert rule provisioned with UID: ${grafanaRuleUid}`);
+
+  await sleep(500);
+  await addNotificationRoute(id, grafanaContactUid, repeatIntervalNum);
+
+  return { grafanaRuleUid, grafanaContactUid };
+}
+
 // ─── Route handlers ──────────────────────────────────────────────────────────
 
 export async function getAlertRules(req, res) {
@@ -168,11 +295,9 @@ export async function createAlertRule(req, res) {
   }
 
   const thresholdNum = parseFloat(threshold);
-  // Clamp repeatInterval to 20s–3600s, default 300s
   const repeatIntervalNum = Math.min(3600, Math.max(20, parseInt(repeatInterval) || 300));
   const emailList = emails.split(',').map(e => e.trim()).filter(Boolean);
 
-  // First create the DB rule to get the ID
   const rule = await prisma.alertRule.create({
     data: {
       organizationId,
@@ -193,72 +318,12 @@ export async function createAlertRule(req, res) {
   let grafanaContactUid = null;
   let grafanaStatus = null;
 
-  // Sync to Grafana if required
   if (alertType === 'GRAFANA' || alertType === 'BOTH') {
     try {
-      // 1. Resolve instance IP for PromQL filter
-      const instanceIp = await resolveInstanceIp(instanceId);
-      const expr = buildPromQL(metric, instanceIp);
+      const uids = await provisionGrafanaRule({ ...rule, emailList });
+      grafanaRuleUid = uids.grafanaRuleUid;
+      grafanaContactUid = uids.grafanaContactUid;
 
-      if (!expr) throw new Error(`Unknown metric: ${metric}`);
-
-      // 2. Create contact point with the user's emails
-      grafanaContactUid = await createGrafanaContactPoint(emailList, rule.id);
-
-      // 3. Create the alert rule in Grafana with the folderUID and a rule-specific label
-      const metricLabel = { cpu: 'CPU Usage', memory: 'Memory Usage', disk: 'Disk Usage' }[metric] || metric;
-      const instanceLabel = instanceIp ? ` (${instanceIp})` : ' (All Instances)';
-
-      const grafanaPayload = {
-        title: `Sidroid_${metric.toUpperCase()}_${rule.id.substring(0, 8)}`,
-        folderUID: GRAFANA_FOLDER_UID,
-        ruleGroup: 'SidroidRules',
-        condition: 'C',
-        data: [
-          {
-            refId: 'A',
-            datasourceUid: 'victoriametrics',
-            model: { expr, refId: 'A', instant: true },
-            relativeTimeRange: { from: 600, to: 0 }
-          },
-          {
-            refId: 'C',
-            datasourceUid: '__expr__',
-            model: {
-              conditions: [{
-                evaluator: { params: [thresholdNum], type: 'gt' },
-                operator: { type: 'and' },
-                query: { params: ['A'] },
-                reducer: { params: [], type: 'last' },
-                type: 'query'
-              }],
-              expression: 'A',
-              refId: 'C',
-              type: 'threshold'
-            }
-          }
-        ],
-        execErrState: 'Alerting',
-        noDataState: 'NoData',
-        for: '1m',
-        labels: {
-          severity: 'critical',
-          sidroid_rule_id: rule.id,  // Used by notification policy routing
-        },
-        annotations: {
-          summary: `${metricLabel}${instanceLabel} exceeded ${thresholdNum}%`,
-          description: `Sidroid alert: ${metricLabel} threshold of ${thresholdNum}% has been exceeded. Check your dashboard immediately.`,
-        }
-      };
-
-      const grafanaRes = await grafana.post('/api/v1/provisioning/alert-rules', grafanaPayload);
-      grafanaRuleUid = grafanaRes.data.uid;
-      console.log(`[Grafana] Alert rule provisioned with UID: ${grafanaRuleUid}`);
-
-      // 4. Set up notification policy route for this rule
-      await addNotificationRoute(rule.id, grafanaContactUid, repeatIntervalNum);
-
-      // 5. Update DB rule with Grafana UIDs
       await prisma.alertRule.update({
         where: { id: rule.id },
         data: { grafanaRuleUid, grafanaContactUid }
@@ -285,27 +350,76 @@ export async function deleteAlertRule(req, res) {
 
   const rule = await prisma.alertRule.findUnique({ where: { id } });
 
-  if (rule?.grafanaRuleUid) {
-    try {
-      await grafana.delete(`/api/v1/provisioning/alert-rules/${rule.grafanaRuleUid}`);
-      console.log(`[Grafana] Alert rule deleted: ${rule.grafanaRuleUid}`);
-    } catch (e) {
-      console.error('[Grafana] Failed to delete alert rule:', e?.response?.data || e.message);
-    }
-  }
+  // 1. Clear in-memory cooldown IMMEDIATELY so the custom evaluator stops on next poll
+  clearCooldown(id);
 
-  if (rule?.grafanaContactUid) {
-    try {
-      await grafana.delete(`/api/v1/provisioning/contact-points/${rule.grafanaContactUid}`);
-      console.log(`[Grafana] Contact point deleted: ${rule.grafanaContactUid}`);
-    } catch (e) {
-      console.error('[Grafana] Failed to delete contact point:', e?.response?.data || e.message);
-    }
-  }
+  // 2. Remove from Grafana (rule + contact point + notification route)
+  await removeGrafanaRule(rule);
 
-  // Remove notification policy route
-  if (rule) await removeNotificationRoute(rule.id);
-
+  // 3. Delete from DB
   await prisma.alertRule.delete({ where: { id } });
   return ok(res, null, 'Alert rule deleted');
+}
+
+export async function pauseAlertRule(req, res) {
+  const { id } = req.params;
+
+  const rule = await prisma.alertRule.findUnique({ where: { id } });
+  if (!rule) return res.status(404).json({ success: false, message: 'Alert rule not found' });
+
+  // 1. Clear cooldown so the custom evaluator stops immediately on next poll
+  clearCooldown(id);
+
+  // 2. Remove from Grafana (delete the Grafana rule to stop Grafana emails)
+  //    We store the fact that it was paused — on resume we re-provision it
+  await removeGrafanaRule(rule);
+
+  // 3. Mark as paused in DB, clear Grafana UIDs (will be re-created on resume)
+  const updated = await prisma.alertRule.update({
+    where: { id },
+    data: {
+      isPaused: true,
+      grafanaRuleUid: null,
+      grafanaContactUid: null,
+    }
+  });
+
+  console.log(`[Alert Rule] Paused rule ${id} — Grafana alerts removed, custom engine skipping.`);
+  return ok(res, { rule: updated }, 'Alert rule paused');
+}
+
+export async function resumeAlertRule(req, res) {
+  const { id } = req.params;
+
+  const rule = await prisma.alertRule.findUnique({ where: { id } });
+  if (!rule) return res.status(404).json({ success: false, message: 'Alert rule not found' });
+
+  let grafanaRuleUid = null;
+  let grafanaContactUid = null;
+  let grafanaStatus = null;
+
+  // Re-provision Grafana alert rule if needed
+  if (rule.alertType === 'GRAFANA' || rule.alertType === 'BOTH') {
+    try {
+      const uids = await provisionGrafanaRule(rule);
+      grafanaRuleUid = uids.grafanaRuleUid;
+      grafanaContactUid = uids.grafanaContactUid;
+      grafanaStatus = { success: true };
+    } catch (error) {
+      console.error('[Grafana] Failed to re-provision on resume:', error?.response?.data || error.message);
+      grafanaStatus = { success: false, message: error?.response?.data?.message || error.message };
+    }
+  }
+
+  const updated = await prisma.alertRule.update({
+    where: { id },
+    data: {
+      isPaused: false,
+      grafanaRuleUid,
+      grafanaContactUid,
+    }
+  });
+
+  console.log(`[Alert Rule] Resumed rule ${id}.`);
+  return ok(res, { rule: updated, grafanaStatus }, 'Alert rule resumed');
 }
