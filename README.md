@@ -1,5 +1,13 @@
 # Multi-Organization Monitoring System
 
+## Copyright and usage notice
+
+Copyright (c) 2026 Siddhant Jadhav. All rights reserved.
+
+This repository is public for portfolio and review purposes only. You may view the code, but you may not copy, modify, distribute, or use it commercially without written permission from the author.
+
+---
+
 A production-ready starter project for monitoring **multiple organizations (AWS accounts)** with:
 
 - Grafana
