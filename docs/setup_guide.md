@@ -2,8 +2,15 @@
 
 ## 10-minute quick start
 
-### 1. Extract the ZIP
-Unzip `monitoring-system.zip`.
+### 1. Prepare local environment values
+
+Copy the example file and set values locally:
+
+```bash
+cp docker/.env.example docker/.env
+```
+
+Do not commit `docker/.env`, cloud credential exports, `.pem` files, or private keys.
 
 ### 2. Edit node targets
 Open:
@@ -27,14 +34,14 @@ docker-compose up -d
 
 ### 4. Open services
 
-- Grafana: `http://localhost:3000`
+- Grafana: `http://localhost:3005`
 - VictoriaMetrics: `http://localhost:8428`
 - vmagent: `http://localhost:8429`
 
-Default Grafana credentials:
+Grafana login values come from your local environment:
 
-- user: `admin`
-- password: `admin123`
+- user: `GRAFANA_ADMIN_USER`
+- password: `GRAFANA_ADMIN_PASSWORD`
 
 ### 5. Install node exporter on each EC2 node
 Copy `scripts/install_node_exporter.sh` to each Linux instance and run:
@@ -127,6 +134,14 @@ For scheduled pushes, add a cron entry such as:
 ```cron
 * * * * * /opt/monitoring/send_metrics.sh >> /var/log/send_metrics.log 2>&1
 ```
+
+## Security checklist before making the repo public
+
+- No `.env` files are committed.
+- No AWS CSV credential exports are committed.
+- No `.pem`, `.key`, or private SSH files are committed.
+- Any previously committed AWS/IAM credentials have been revoked and replaced.
+- Grafana admin credentials are provided through local environment variables only.
 
 ## Recommended rollout order
 1. Deploy the monitoring stack.
