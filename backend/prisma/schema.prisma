@@ -8,81 +8,85 @@ datasource db {
 }
 
 model Organization {
-  id              String              @id @default(uuid())
-  name            String
-  slug            String              @unique
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id                   String               @id @default(uuid())
+  name                 String
+  slug                 String               @unique
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
-  users           User[]
-  awsAccounts     AwsAccount[]
-  monitoredInstances MonitoredInstance[]
-  apiKeys         ApiKey[]
-  alerts          Alert[]
+  users                User[]
+  awsAccounts          AwsAccount[]
+  monitoredInstances   MonitoredInstance[]
+  apiKeys              ApiKey[]
+  alerts               Alert[]
+  alertRules           AlertRule[]
+  notificationChannels NotificationChannel[]
+  syncLogs             SyncLog[]
 
   @@map("organizations")
 }
 
 model User {
-  id              String         @id @default(uuid())
-  organizationId  String
-  name            String
-  email           String         @unique
-  passwordHash    String
-  role            UserRole       @default(VIEWER)
-  isActive        Boolean        @default(true)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  email          String       @unique
+  passwordHash   String
+  role           UserRole     @default(VIEWER)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("users")
 }
 
 model AwsAccount {
-  id              String         @id @default(uuid())
+  id              String              @id @default(uuid())
   organizationId  String
   accountName     String
-  accountId       String         @unique
+  accountId       String              @unique
   region          String
   accessKeyId     String?
   secretAccessKey String?
   roleArn         String?
   externalId      String?
-  authMode        AwsAuthMode    @default(STATIC_KEYS)
-  isActive        Boolean        @default(true)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  authMode        AwsAuthMode         @default(STATIC_KEYS)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
-  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   monitoredInstances MonitoredInstance[]
+  syncLogs           SyncLog[]
 
   @@index([organizationId])
   @@map("aws_accounts")
 }
 
 model MonitoredInstance {
-  id                String          @id @default(uuid())
-  organizationId    String
-  awsAccountId      String?
-  instanceId        String
-  instanceName      String?
-  hostname          String?
-  privateIp         String?
-  publicIp          String?
-  platform          PlatformType    @default(LINUX)
-  serviceType       ServiceType     @default(EC2)
-  region            String?
-  status            InstanceStatus  @default(RUNNING)
-  orgLabel          String?
-  serviceLabel      String?
-  lastSeenAt        DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id             String        @id @default(uuid())
+  organizationId String
+  awsAccountId   String?
+  instanceId     String
+  instanceName   String?
+  hostname       String?
+  privateIp      String?
+  publicIp       String?
+  platform       PlatformType  @default(LINUX)
+  serviceType    ServiceType   @default(EC2)
+  region         String?
+  status         InstanceStatus @default(RUNNING)
+  orgLabel       String?
+  serviceLabel   String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  awsAccount        AwsAccount?     @relation(fields: [awsAccountId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccount   AwsAccount?  @relation(fields: [awsAccountId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([awsAccountId])
@@ -91,42 +95,123 @@ model MonitoredInstance {
 }
 
 model ApiKey {
-  id              String        @id @default(uuid())
-  organizationId  String
-  name            String
-  keyHash         String
-  isActive        Boolean       @default(true)
-  expiresAt       DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  keyHash        String
+  isActive       Boolean   @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("api_keys")
 }
 
-model Alert {
-  id                String         @id @default(uuid())
-  organizationId    String
-  title             String
-  description       String?
-  severity          AlertSeverity  @default(MEDIUM)
-  source            String?
-  metricName        String?
-  instanceId        String?
-  status            AlertStatus    @default(OPEN)
-  triggeredAt       DateTime       @default(now())
-  resolvedAt        DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+// A persistent alert rule that the evaluator checks on every tick.
+model AlertRule {
+  id             String        @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  // PromQL expression. The evaluator appends org label isolation automatically.
+  promql         String        @db.Text
+  // Comparison operator applied to the scalar result vs threshold.
+  condition      RuleCondition
+  threshold      Float
+  // How many consecutive evaluation cycles the condition must be true before firing.
+  // At 30s intervals, duration=2 means condition must hold for ~60s.
+  forCycles      Int           @default(1)
+  severity       AlertSeverity @default(MEDIUM)
+  isActive       Boolean       @default(true)
+  // Evaluator state machine fields — managed by the engine, not the API.
+  state          RuleState     @default(INACTIVE)
+  pendingSince   DateTime?
+  lastEvaluatedAt DateTime?
+  lastFiredAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alerts       Alert[]
+
+  @@index([organizationId])
+  @@index([state])
+  @@map("alert_rules")
+}
+
+model Alert {
+  id             String        @id @default(uuid())
+  organizationId String
+  // Null for manually created alerts.
+  ruleId         String?
+  title          String
+  description    String?
+  severity       AlertSeverity @default(MEDIUM)
+  source         String?
+  metricName     String?
+  instanceId     String?
+  status         AlertStatus   @default(OPEN)
+  triggeredAt    DateTime      @default(now())
+  resolvedAt     DateTime?
+  // Labels from the metric that fired this alert (stored as JSON string).
+  labels         String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alertRule    AlertRule?   @relation(fields: [ruleId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([status])
+  @@index([ruleId])
   @@map("alerts")
 }
+
+// Notification channel: email, Slack webhook, or generic HTTP webhook.
+model NotificationChannel {
+  id             String      @id @default(uuid())
+  organizationId String
+  name           String
+  type           ChannelType
+  // Channel-specific config stored as encrypted JSON string.
+  // EMAIL:   { to: string[], fromName?: string }
+  // SLACK:   { webhookUrl: string }
+  // WEBHOOK: { url: string, method?: string, headers?: Record<string,string> }
+  config         String      @db.Text
+  // Minimum severity that triggers this channel (inclusive).
+  minSeverity    AlertSeverity @default(LOW)
+  isActive       Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("notification_channels")
+}
+
+model SyncLog {
+  id                  String     @id @default(uuid())
+  organizationId      String
+  awsAccountId        String
+  status              SyncStatus
+  startedAt           DateTime   @default(now())
+  finishedAt          DateTime?
+  errorMessage        String?    @db.Text
+  resourcesDiscovered Int        @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccount   AwsAccount   @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([awsAccountId])
+  @@map("sync_logs")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum UserRole {
   ADMIN
@@ -169,4 +254,30 @@ enum AlertStatus {
   OPEN
   ACKNOWLEDGED
   RESOLVED
+}
+
+enum RuleCondition {
+  GT
+  GTE
+  LT
+  LTE
+  EQ
+}
+
+enum RuleState {
+  INACTIVE
+  PENDING
+  FIRING
+}
+
+enum ChannelType {
+  EMAIL
+  SLACK
+  WEBHOOK
+}
+
+enum SyncStatus {
+  STARTED
+  SUCCESS
+  FAILED
 }

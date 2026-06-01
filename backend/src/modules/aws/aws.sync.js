@@ -1,9 +1,11 @@
 import { EC2Client, DescribeInstancesCommand } from '@aws-sdk/client-ec2';
 import { env } from '../../config/env.js';
-import { upsertInstance } from '../instances/instances.repository.js';
+import { writeFileSdTargets } from '../../lib/targetWriter.js';
+import { upsertInstance, markInstancesTerminated } from '../instances/instances.repository.js';
 import {
   findAwsAccountById,
-  insertSyncLog,
+  createSyncLog,
+  finishSyncLog,
   updateAwsAccountSyncTimestamp,
 } from './aws.repository.js';
 
@@ -11,6 +13,11 @@ function buildEc2Client(awsAccount) {
   const config = { region: awsAccount.region || env.aws.syncDefaultRegion };
 
   if (awsAccount.authMode === 'STATIC_KEYS') {
+    if (!awsAccount.accessKeyId || !awsAccount.secretAccessKey) {
+      const err = new Error('AWS account is missing static key credentials');
+      err.statusCode = 400;
+      throw err;
+    }
     config.credentials = {
       accessKeyId: awsAccount.accessKeyId,
       secretAccessKey: awsAccount.secretAccessKey,
@@ -21,43 +28,47 @@ function buildEc2Client(awsAccount) {
 }
 
 function tagsToMap(tags = []) {
-  return Object.fromEntries((tags || []).map((tag) => [tag.Key, tag.Value]));
+  return Object.fromEntries(
+    (tags || []).filter((t) => t.Key).map((t) => [t.Key, t.Value ?? '']),
+  );
 }
 
 function mapInstanceStatus(state) {
   switch (state) {
-    case 'running':
-      return 'RUNNING';
+    case 'running': return 'RUNNING';
     case 'stopped':
-    case 'stopping':
-      return 'STOPPED';
-    case 'terminated':
-      return 'TERMINATED';
-    default:
-      return 'UNKNOWN';
+    case 'stopping': return 'STOPPED';
+    case 'terminated': return 'TERMINATED';
+    default: return 'UNKNOWN';
   }
 }
 
-export async function syncAwsAccountInstances(awsAccountId) {
+export async function syncAwsAccountInstances(awsAccountId, options = {}) {
   const awsAccount = await findAwsAccountById(awsAccountId);
 
   if (!awsAccount) {
-    const error = new Error('AWS account not found');
-    error.statusCode = 404;
-    throw error;
+    const err = new Error('AWS account not found');
+    err.statusCode = 404;
+    throw err;
   }
 
-  await insertSyncLog({
-    awsAccountId,
-    status: 'started',
-    message: 'Sync started',
+  if (options.organizationId && awsAccount.organizationId !== options.organizationId) {
+    const err = new Error('AWS account not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const syncLog = await createSyncLog({
+    organizationId: awsAccount.organizationId,
+    awsAccountId: awsAccount.id,
   });
 
-  const client = buildEc2Client(awsAccount);
   const discovered = [];
   let nextToken;
 
   try {
+    const client = buildEc2Client(awsAccount);
+
     do {
       const command = new DescribeInstancesCommand({
         Filters: [
@@ -75,6 +86,7 @@ export async function syncAwsAccountInstances(awsAccountId) {
           const tags = tagsToMap(instance.Tags);
           const service = tags.Service || 'ec2';
           const nodeName = tags.Node || tags.Name || instance.InstanceId;
+          const orgLabel = tags.OrgName || awsAccount.organization?.name || awsAccount.organizationId;
 
           const record = {
             organizationId: awsAccount.organizationId,
@@ -88,7 +100,7 @@ export async function syncAwsAccountInstances(awsAccountId) {
             status: mapInstanceStatus(instance.State?.Name),
             serviceType: 'EC2',
             platform: instance.Platform === 'windows' ? 'WINDOWS' : 'LINUX',
-            orgLabel: null,
+            orgLabel,
             serviceLabel: service,
             lastSeenAt: new Date(),
           };
@@ -99,30 +111,32 @@ export async function syncAwsAccountInstances(awsAccountId) {
       }
     } while (nextToken);
 
-    await updateAwsAccountSyncTimestamp(awsAccountId);
+    // Mark instances that disappeared from AWS as TERMINATED.
+    const seenIds = discovered.map((i) => i.instanceId);
+    await markInstancesTerminated(awsAccount.id, seenIds);
 
-    await insertSyncLog({
-      awsAccountId,
-      status: 'success',
-      message: 'Sync completed',
-      discoveredCount: discovered.length,
+    // Write file_sd JSON so vmagent picks up the current set of scrape targets.
+    await writeFileSdTargets(awsAccount, discovered).catch(() => {
+      // Non-fatal — sync succeeds even if target file write fails.
     });
+
+    await updateAwsAccountSyncTimestamp(awsAccountId);
+    await finishSyncLog(syncLog.id, { status: 'SUCCESS', resourcesDiscovered: discovered.length });
 
     return {
       awsAccountId,
       organizationId: awsAccount.organizationId,
       region: awsAccount.region,
       discoveredCount: discovered.length,
-      instances: discovered,
+      syncLogId: syncLog.id,
     };
   } catch (error) {
-    await insertSyncLog({
-      awsAccountId,
-      status: 'failed',
-      message: error.message,
-      discoveredCount: discovered.length,
-    });
-
+    const message = error?.message ?? 'AWS sync failed';
+    await finishSyncLog(syncLog.id, {
+      status: 'FAILED',
+      errorMessage: message,
+      resourcesDiscovered: discovered.length,
+    }).catch(() => {});
     throw error;
   }
 }

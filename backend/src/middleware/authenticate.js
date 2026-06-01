@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 
 export function authenticate(req, res, next) {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  if (!header?.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, message: 'Missing bearer token' });
   }
 
@@ -11,7 +11,19 @@ export function authenticate(req, res, next) {
 
   try {
     const payload = jwt.verify(token, env.jwtSecret);
-    req.user = payload;
+
+    if (!payload.sub || !payload.organizationId || !payload.role) {
+      return res.status(401).json({ success: false, message: 'Invalid token payload' });
+    }
+
+    req.user = {
+      id: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      organizationId: payload.organizationId,
+      role: payload.role,
+    };
+
     return next();
   } catch {
     return res.status(401).json({ success: false, message: 'Invalid token' });

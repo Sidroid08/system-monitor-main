@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
-
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
-
 
 function required(name, fallback = undefined) {
   const value = process.env[name] ?? fallback;
@@ -12,12 +12,27 @@ function required(name, fallback = undefined) {
   return value;
 }
 
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const isProduction = nodeEnv === 'production';
+
+// In production, refuse a weak JWT secret.
+const jwtSecret = required('JWT_SECRET', 'change-me');
+if (isProduction && jwtSecret.length < 32) {
+  throw new Error('JWT_SECRET must be at least 32 characters in production');
+}
+
+// Resolve the path for file_sd target files relative to the project root.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const defaultTargetsDir = path.resolve(__dirname, '../../../../configs/targets');
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV ?? 'development',
+  nodeEnv,
+  isProduction,
   port: Number(process.env.PORT ?? 5000),
-  jwtSecret: required('JWT_SECRET', 'change-me'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
-  corsOrigin: process.env.CORS_ORIGIN ?? '*',
+  jwtSecret,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? (isProduction ? '15m' : '7d'),
+  corsOrigin: process.env.CORS_ORIGIN ?? (isProduction ? undefined : '*'),
+
   databaseUrl: required('DATABASE_URL'),
   db: {
     host: process.env.DB_HOST ?? 'localhost',
@@ -27,8 +42,28 @@ export const env = {
     password: process.env.DB_PASSWORD ?? '',
     connectionLimit: Number(process.env.DB_CONNECTION_LIMIT ?? 10),
   },
+
   aws: {
     defaultRegion: process.env.AWS_DEFAULT_REGION ?? 'us-east-1',
     syncDefaultRegion: process.env.AWS_SYNC_DEFAULT_REGION ?? 'us-east-1',
+  },
+
+  // Internal VictoriaMetrics URL — accessible within the Docker network.
+  victoriaMetricsUrl: process.env.VICTORIA_METRICS_URL ?? 'http://victoriametrics:8428',
+
+  // Alert evaluation: how often to run the evaluator (seconds).
+  evaluatorIntervalSeconds: Number(process.env.EVALUATOR_INTERVAL_SECONDS ?? 30),
+
+  // File-based service discovery target directory written after each AWS sync.
+  targetsDirPath: process.env.TARGETS_DIR_PATH ?? defaultTargetsDir,
+
+  // SMTP for email notifications (optional — notifications fall back to Slack/webhook if absent).
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+    from: process.env.SMTP_FROM ?? 'Sidroid Alerts <alerts@sidroid.io>',
   },
 };

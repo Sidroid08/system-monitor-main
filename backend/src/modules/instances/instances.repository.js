@@ -1,27 +1,25 @@
 import prisma from '../../lib/prisma.js';
 
-export async function listInstances({ organizationId = null } = {}) {
-  return prisma.monitoredInstance.findMany({
-    where: organizationId ? { organizationId } : undefined,
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      awsAccount: {
-        select: {
-          id: true,
-          accountName: true,
-          accountId: true,
-          region: true,
-        },
-      },
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-    },
-  });
+const instanceInclude = {
+  awsAccount: { select: { id: true, accountName: true, accountId: true, region: true } },
+  organization: { select: { id: true, name: true, slug: true } },
+};
+
+export async function listInstances({ organizationId = null, limit = 50, offset = 0 } = {}) {
+  const where = organizationId ? { organizationId } : undefined;
+
+  const [instances, total] = await Promise.all([
+    prisma.monitoredInstance.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      include: instanceInclude,
+      take: limit,
+      skip: offset,
+    }),
+    prisma.monitoredInstance.count({ where }),
+  ]);
+
+  return { instances, total };
 }
 
 export async function upsertInstance(instance) {
@@ -62,5 +60,18 @@ export async function upsertInstance(instance) {
       serviceLabel: instance.serviceLabel ?? null,
       lastSeenAt: instance.lastSeenAt ?? new Date(),
     },
+  });
+}
+
+// After a full sync, flip any instance not in seenInstanceIds to TERMINATED.
+export async function markInstancesTerminated(awsAccountId, seenInstanceIds) {
+  if (!seenInstanceIds.length) return;
+  return prisma.monitoredInstance.updateMany({
+    where: {
+      awsAccountId,
+      instanceId: { notIn: seenInstanceIds },
+      status: { not: 'TERMINATED' },
+    },
+    data: { status: 'TERMINATED' },
   });
 }
