@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Cloud credentials and generated credential exports
+*accessKeys*.csv
+*credentials*.csv
+*_accessKeys.csv
+*_credentials.csv
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+
+# Logs and runtime output
+*.log
+logs/
+
+# Build/cache output
+dist/
+build/
+.cache/
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
