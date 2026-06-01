@@ -50,6 +50,7 @@ monitoring-system/
 │
 ├── docker/
 │   ├── docker-compose.yml
+│   ├── .env.example
 │   ├── grafana/
 │   │   └── provisioning/
 │   └── victoriametrics/
@@ -82,14 +83,26 @@ monitoring-system/
 
 ## Quick start
 
-### 1. Configure your EC2 targets
+### 1. Configure your local secrets
+
+Copy the Docker environment example and fill in local-only values:
+
+```bash
+cp docker/.env.example docker/.env
+```
+
+Never commit `docker/.env`, AWS credential exports, `.pem` files, or private keys.
+
+### 2. Configure your EC2 targets
+
 Edit:
 
 `configs/vmagent_config.yml`
 
 Replace the example target IPs with your real EC2 node_exporter endpoints.
 
-### 2. Start the monitoring stack
+### 3. Start the monitoring stack
+
 Open a terminal inside the `docker/` folder and run:
 
 ```bash
@@ -102,12 +115,13 @@ or:
 docker-compose up -d
 ```
 
-### 3. Access Grafana
-- URL: `http://localhost:3000`
-- Username: `admin`
-- Password: `admin123`
+### 4. Access Grafana
 
-### 4. Install node_exporter on each Linux EC2 instance
+- URL: `http://localhost:3005`
+- Username: value of `GRAFANA_ADMIN_USER` in your local environment
+- Password: value of `GRAFANA_ADMIN_PASSWORD` in your local environment
+
+### 5. Install node_exporter on each Linux EC2 instance
 
 ```bash
 sudo bash scripts/install_node_exporter.sh
@@ -119,7 +133,8 @@ If running from a copied script on the node, just use:
 sudo bash install_node_exporter.sh
 ```
 
-### 5. Open the dashboard
+### 6. Open the dashboard
+
 Go to:
 
 **Sidroid Monitoring → Multi-Organization AWS Node Monitoring**
@@ -158,9 +173,10 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ---
 
-## Important notes
+## Security notes
 
-- Run the compose command from the `docker/` directory so the relative mounts work.
+- Do not commit real AWS keys, console credential exports, `.pem` files, private keys, or local `.env` files.
+- Rotate any cloud credentials that were ever committed, even if they were deleted later.
 - Keep node_exporter private and reachable only from the monitoring server.
 - For hundreds of nodes, keep labels low-cardinality and use private networking.
 
