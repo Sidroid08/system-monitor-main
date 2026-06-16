@@ -15,6 +15,7 @@ Express/Prisma control-plane backend for the Sidroid monitoring project.
 - Redis/BullMQ for background uptime jobs
 - API-key-authenticated logs and metrics ingestion
 - JWT-protected telemetry query APIs
+- JWT-protected observability visualization APIs
 - Zod request validation
 - VictoriaMetrics query proxy
 
@@ -115,9 +116,15 @@ npm run db:check
 - `POST /api/ingest/logs`
 - `POST /api/ingest/metrics`
 - `GET /api/logs`
+- `GET /api/logs/stats`
 - `GET /api/logs/:id`
 - `GET /api/metrics`
 - `GET /api/metrics/names`
+- `GET /api/metrics/aggregate`
+- `GET /api/observability/overview`
+- `GET /api/observability/services/:serviceId/summary`
+- `GET /api/observability/retention/status`
+- `GET /api/observability/victoriametrics/health`
 
 Most routes require a bearer token. Tenant-owned routes use the authenticated user's active organization membership.
 
@@ -272,6 +279,44 @@ Known limitations:
 - No integration tests with real MySQL yet.
 - Retention cleanup is manual/global, not per-org or scheduled.
 - Log search uses simple MySQL `LIKE`; it is not full-text indexed yet.
+
+## Observability visualization APIs (Phase 8)
+
+Phase 8 adds dashboard-friendly read APIs over the existing MySQL control-plane and telemetry tables.
+
+Routes use JWT auth and are available to `VIEWER` or higher:
+
+```text
+GET /api/observability/overview
+GET /api/observability/services/:serviceId/summary?range=24h&bucket=auto
+GET /api/observability/retention/status
+GET /api/observability/victoriametrics/health
+GET /api/metrics/aggregate
+GET /api/logs/stats
+```
+
+Range and bucket controls:
+
+```text
+range=1h|24h|7d|30d
+bucket=auto|15s|30s|1m|5m|15m|1h|6h|1d
+```
+
+Metric aggregation supports:
+
+```text
+aggregation=avg|min|max|sum|count
+groupBy=serviceId,name
+```
+
+Safety limits:
+
+- time ranges are capped at 30 days
+- time-series responses are capped at 500 buckets
+- service filters must belong to the authenticated organization
+- raw SQL is only used for time bucketing with Prisma parameter binding and whitelisted dynamic clauses
+
+See `../docs/PHASE_8_NOTES.md` for the dashboard data flow and endpoint details.
 
 ## Migrations
 

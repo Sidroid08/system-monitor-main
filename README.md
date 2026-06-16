@@ -173,6 +173,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - Phase 5 alerting notes: `docs/PHASE_5_NOTES.md`
 - Phase 6 incident management notes: `docs/PHASE_6_NOTES.md`
 - Phase 7 telemetry ingestion notes: `docs/PHASE_7_NOTES.md`
+- Phase 8 observability visualization notes: `docs/PHASE_8_NOTES.md`
 - Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
@@ -181,7 +182,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 7 adds the telemetry ingestion foundation: API-key-authenticated log and metric ingestion, JWT-protected query APIs, MySQL-backed telemetry storage, and a manual retention cleanup script. See the phase notes and roadmap before adding Phase 8 features such as VictoriaMetrics forwarding, dashboards, quotas, or status pages.
+This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 8 adds dashboard-friendly observability APIs over existing uptime, alert, incident, log, and metric data. It does not add a frontend yet and does not redesign telemetry storage.
 
 ---
 
@@ -217,6 +218,7 @@ Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, 
 | Phase 5 | Uptime alert rules, cooldown/dedup, notification dispatch |
 | Phase 6 | **Incident management**: incident model, lifecycle, timeline, alert-to-incident integration |
 | Phase 7 | **Telemetry ingestion**: logs/metrics ingest via API keys, JWT query APIs, retention cleanup |
+| Phase 8 | **Observability visualization APIs**: overview, service summaries, metric aggregation, log stats, retention/VM health |
 
 ---
 
@@ -276,10 +278,40 @@ See `docs/PHASE_7_NOTES.md` for migration notes, environment variables, paginati
 
 ---
 
+## Phase 8: Observability Visualization APIs
+
+Phase 8 adds dashboard-ready read APIs for a future SaaS UI.
+
+**API routes:**
+```
+GET /api/observability/overview
+GET /api/observability/services/:serviceId/summary
+GET /api/observability/retention/status
+GET /api/observability/victoriametrics/health
+GET /api/metrics/aggregate
+GET /api/logs/stats
+```
+
+**Highlights:**
+- JWT + VIEWER access for dashboard reads.
+- tenant scope from the authenticated user's active organization.
+- 30-day maximum query range.
+- 500-bucket maximum for time-series responses.
+- service filters validated against the active organization.
+- parameterized MySQL bucketing for metric aggregates and log statistics.
+- VictoriaMetrics query proxy now has stronger route-level RBAC and range validation.
+
+See `docs/PHASE_8_NOTES.md` for dashboard data flow, endpoint contracts, limits, and known limitations.
+
+---
+
 ## Next production upgrades
 
-- VictoriaMetrics remote-write for custom metrics
 - API rate limiting and per-org telemetry quotas
+- Dockerized backend and worker processes
+- CI/CD for lint, tests, Prisma, and Docker config validation
+- MySQL integration tests for dashboard aggregation SQL
+- VictoriaMetrics remote-write for custom metrics
 - Retention enforcement worker
 - add `vmalert` for infrastructure alerting
 - add TLS/reverse proxy

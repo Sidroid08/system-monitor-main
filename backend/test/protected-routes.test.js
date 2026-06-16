@@ -84,6 +84,12 @@ test('protected routes return 401 without token', async () => {
     { method: 'GET',  path: '/api/api-keys' },
     { method: 'GET',  path: '/api/services' },
     { method: 'GET',  path: '/api/worker-health' },
+    { method: 'GET',  path: '/api/logs/stats' },
+    { method: 'GET',  path: '/api/metrics/aggregate' },
+    { method: 'GET',  path: '/api/observability/overview' },
+    { method: 'GET',  path: '/api/observability/services/11111111-1111-4111-8111-111111111111/summary' },
+    { method: 'GET',  path: '/api/observability/retention/status' },
+    { method: 'GET',  path: '/api/observability/victoriametrics/health' },
   ];
 
   for (const r of routes) {
