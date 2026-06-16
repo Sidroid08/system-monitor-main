@@ -1,5 +1,39 @@
 
 services:
+  mysql:
+    image: mysql:8.4
+    container_name: sidroid-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-local-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-sidroid}
+      MYSQL_USER: ${MYSQL_USER:-sidroid_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local-dev-password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u${MYSQL_USER:-sidroid_user} -p${MYSQL_PASSWORD:-local-dev-password} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: sidroid-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   victoriametrics:
     image: victoriametrics/victoria-metrics:v1.121.0
     container_name: victoriametrics
@@ -56,5 +90,7 @@ services:
 
 
 volumes:
+  mysql_data:
+  redis_data:
   vm_data:
   grafana_data:

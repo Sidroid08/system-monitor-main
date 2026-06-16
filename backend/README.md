@@ -11,7 +11,8 @@ Express/Prisma control-plane backend for the Sidroid monitoring project.
 - JWT and bcrypt authentication
 - Organization membership and basic RBAC
 - Hashed organization-scoped API keys
-- Monitored service registry and manual HTTP uptime checks
+- Monitored service registry, manual HTTP checks, and scheduled uptime workers
+- Redis/BullMQ for background uptime jobs
 - Zod request validation
 - VictoriaMetrics query proxy
 
@@ -42,6 +43,14 @@ DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx 
 ```bash
 npm run dev
 ```
+
+6. Start scheduled uptime monitoring in a separate terminal when Redis is available:
+
+```bash
+npm run worker
+```
+
+Use `npm run worker:uptime` for a worker-only process and `npm run scheduler:uptime` for a scheduler-only process.
 
 ## Validation
 
@@ -88,6 +97,7 @@ npm run db:check
 - `PATCH /api/services/:id`
 - `DELETE /api/services/:id`
 - `POST /api/services/:id/check`
+- `GET /api/worker-health`
 
 Most routes require a bearer token. Tenant-owned routes use the authenticated user's active organization membership.
 
@@ -135,6 +145,15 @@ Supported service types:
 
 Manual uptime checks currently support `HTTP`, `API`, and `WEB` services. They store status, response time, HTTP status code, and a truncated error message. They do not store response bodies.
 
+Scheduled uptime checks use Redis/BullMQ:
+
+- queue name: `uptime-checks`
+- job name: `run-uptime-check`
+- job payload: `organizationId`, `serviceId`, `requestedBy`, `source`
+- API server does not start schedulers automatically
+- `DOWN` is stored as a completed check result, not a failed BullMQ job
+- internal worker failures are retried with exponential backoff
+
 Example service:
 
 ```json
@@ -158,6 +177,28 @@ curl -X POST http://localhost:5000/api/services/<service-id>/check \
   -H "Authorization: Bearer <token>"
 ```
 
+Worker diagnostics:
+
+```bash
+curl http://localhost:5000/api/worker-health \
+  -H "Authorization: Bearer <owner-or-admin-token>"
+```
+
+Worker environment:
+
+```text
+REDIS_URL=redis://localhost:6379
+UPTIME_SCHEDULER_INTERVAL_SECONDS=15
+UPTIME_SCHEDULER_SCAN_LIMIT=100
+UPTIME_WORKER_CONCURRENCY=5
+```
+
+Local Compose from `docker/` can start MySQL, Redis, and the metrics stack:
+
+```bash
+docker compose --env-file .env.example up -d mysql redis victoriametrics vmagent grafana
+```
+
 ## Migrations
 
 Validate the schema:
@@ -166,7 +207,7 @@ Validate the schema:
 DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma validate
 ```
 
-Apply migrations only after reviewing `docs/PHASE_2_NOTES.md`, especially the membership backfill and API key unique-index notes.
+Apply migrations only after reviewing `docs/PHASE_2_NOTES.md`, `docs/PHASE_3_NOTES.md`, and `docs/PHASE_4_NOTES.md`.
 
 ## Security notes
 

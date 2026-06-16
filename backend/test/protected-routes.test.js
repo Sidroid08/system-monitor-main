@@ -83,6 +83,7 @@ test('protected routes return 401 without token', async () => {
     { method: 'GET',  path: '/api/query/instant?query=up' },
     { method: 'GET',  path: '/api/api-keys' },
     { method: 'GET',  path: '/api/services' },
+    { method: 'GET',  path: '/api/worker-health' },
   ];
 
   for (const r of routes) {
@@ -156,6 +157,20 @@ test('viewer cannot create service or trigger manual check', async () => {
     headers,
   });
   assert.equal(check.status, 403);
+});
+
+test('viewer cannot access worker diagnostics', async () => {
+  const app = createApp();
+  const orgId = '11111111-1111-4111-8111-111111111111';
+  useAuthUser({ organizationId: orgId, role: 'VIEWER' });
+  const token = makeToken(orgId);
+
+  const res = await request(app, {
+    path: '/api/worker-health',
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  assert.equal(res.status, 403);
 });
 
 test('auth endpoints are reachable without token', async () => {

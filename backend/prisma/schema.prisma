@@ -139,6 +139,10 @@ model MonitoredService {
   currentStatus      UptimeStatus         @default(UNKNOWN)
   lastCheckedAt      DateTime?
   lastResponseTimeMs Int?
+  nextCheckAt        DateTime?
+  lastCheckSource    String?              @db.VarChar(40)
+  consecutiveFailures Int                 @default(0)
+  consecutiveSuccesses Int                @default(0)
   createdByUserId    String?
   deletedAt          DateTime?
   createdAt          DateTime             @default(now())
@@ -151,6 +155,7 @@ model MonitoredService {
   @@unique([organizationId, slug])
   @@index([organizationId])
   @@index([organizationId, deletedAt])
+  @@index([organizationId, isActive, nextCheckAt])
   @@index([createdByUserId])
   @@map("monitored_services")
 }

@@ -60,6 +60,17 @@ export const env = {
   // Alert evaluation: how often to run the evaluator (seconds).
   evaluatorIntervalSeconds: Number(process.env.EVALUATOR_INTERVAL_SECONDS ?? 30),
 
+  // Redis is required by queue workers/schedulers, but not by the API server.
+  redis: {
+    url: process.env.REDIS_URL ?? '',
+  },
+
+  uptime: {
+    schedulerIntervalSeconds: Number(process.env.UPTIME_SCHEDULER_INTERVAL_SECONDS ?? 15),
+    schedulerScanLimit: Number(process.env.UPTIME_SCHEDULER_SCAN_LIMIT ?? 100),
+    workerConcurrency: Number(process.env.UPTIME_WORKER_CONCURRENCY ?? 5),
+  },
+
   // File-based service discovery target directory written after each AWS sync.
   targetsDirPath: process.env.TARGETS_DIR_PATH ?? defaultTargetsDir,
 

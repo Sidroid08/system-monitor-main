@@ -15,6 +15,7 @@ import notificationRoutes from './modules/notifications/notifications.routes.js'
 import queryRoutes from './modules/query/query.routes.js';
 import apiKeyRoutes from './modules/api-keys/apiKeys.routes.js';
 import serviceRoutes from './modules/services/services.routes.js';
+import workerHealthRoutes from './modules/worker-health/workerHealth.routes.js';
 
 export function createApp() {
   const app = express();
@@ -58,6 +59,7 @@ export function createApp() {
   app.use('/api/query', queryRoutes);
   app.use('/api/api-keys', apiKeyRoutes);
   app.use('/api/services', serviceRoutes);
+  app.use('/api/worker-health', workerHealthRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

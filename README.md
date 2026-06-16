@@ -169,6 +169,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - Phase 1 stabilization notes: `docs/PHASE_1_NOTES.md`
 - Phase 2 auth/RBAC/multitenancy notes: `docs/PHASE_2_NOTES.md`
 - Phase 3 service uptime monitoring notes: `docs/PHASE_3_NOTES.md`
+- Phase 4 scheduled uptime worker notes: `docs/PHASE_4_NOTES.md`
 - Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
@@ -177,7 +178,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 3 adds tenant-scoped monitored services and manual HTTP uptime checks. See the phase notes and roadmap before adding workers, ingestion, incidents, status pages, or AI features.
+This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 4 adds Redis/BullMQ scheduled uptime workers on top of the tenant-scoped monitored services from Phase 3. See the phase notes and roadmap before adding ingestion, incidents, status pages, or AI features.
 
 ---
 
@@ -194,7 +195,7 @@ $env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroi
 From `docker/`:
 
 ```bash
-docker compose config
+docker compose --env-file .env.example config
 ```
 
 Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, and local tool state out of Git. Use `.env.example` files for placeholders only.
@@ -203,7 +204,8 @@ Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, 
 
 ## Next production upgrades
 
-- add `vmalert` for alerting,
+- connect uptime checks to alert rule evaluation and notifications,
+- add `vmalert` for infrastructure alerting,
 - add TLS/reverse proxy,
 - add Grafana SSO,
 - add EC2 auto-discovery,

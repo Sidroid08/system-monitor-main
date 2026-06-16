@@ -110,7 +110,15 @@ export async function assertSafeCheckTarget(url, resolver = dns.lookup) {
   }
 }
 
-export async function performHttpCheck(service, { fetchImpl = globalThis.fetch, resolver = dns.lookup, now = () => Date.now() } = {}) {
+export async function performHttpCheck(
+  service,
+  {
+    fetchImpl = globalThis.fetch,
+    resolver = dns.lookup,
+    now = () => Date.now(),
+    checkSource = 'manual',
+  } = {},
+) {
   const url = buildCheckUrl(service);
   await assertSafeCheckTarget(url, resolver);
 
@@ -135,7 +143,7 @@ export async function performHttpCheck(service, { fetchImpl = globalThis.fetch, 
       httpStatusCode: response.status,
       responseTimeMs,
       errorMessage: null,
-      checkSource: 'manual',
+      checkSource,
       metadata: {
         method: service.method ?? 'GET',
         expectedStatusCode: service.expectedStatusCode,
@@ -148,7 +156,7 @@ export async function performHttpCheck(service, { fetchImpl = globalThis.fetch, 
       httpStatusCode: null,
       responseTimeMs,
       errorMessage: truncateError(error?.name === 'AbortError' ? 'Request timed out' : error?.message ?? 'Request failed'),
-      checkSource: 'manual',
+      checkSource,
       metadata: {
         method: service.method ?? 'GET',
         expectedStatusCode: service.expectedStatusCode,
