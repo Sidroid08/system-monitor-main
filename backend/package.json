@@ -8,7 +8,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "lint": "node --check src/server.js",
-    "test": "node --test test/authenticate.test.js test/protected-routes.test.js test/schemas.test.js test/evaluator.test.js test/tenant-scope.test.js test/rbac.test.js test/api-keys.test.js",
+    "test": "node --test test/authenticate.test.js test/protected-routes.test.js test/schemas.test.js test/evaluator.test.js test/tenant-scope.test.js test/rbac.test.js test/api-keys.test.js test/services.test.js",
     "sync": "node scripts/manualSync.js",
     "db:check": "node scripts/checkPrisma.js"
   },

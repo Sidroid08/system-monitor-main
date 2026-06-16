@@ -168,6 +168,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - Phase 0 repository audit: `docs/REPO_AUDIT.md`
 - Phase 1 stabilization notes: `docs/PHASE_1_NOTES.md`
 - Phase 2 auth/RBAC/multitenancy notes: `docs/PHASE_2_NOTES.md`
+- Phase 3 service uptime monitoring notes: `docs/PHASE_3_NOTES.md`
 - Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
@@ -176,7 +177,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 2 adds the auth, RBAC, organization membership, API-key, audit-log, and tenant-isolation foundation. See the phase notes and roadmap before adding workers, ingestion, incidents, status pages, or AI features.
+This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 3 adds tenant-scoped monitored services and manual HTTP uptime checks. See the phase notes and roadmap before adding workers, ingestion, incidents, status pages, or AI features.
 
 ---
 

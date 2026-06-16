@@ -18,6 +18,8 @@ model Organization {
   members              OrganizationMember[]
   awsAccounts          AwsAccount[]
   monitoredInstances   MonitoredInstance[]
+  monitoredServices    MonitoredService[]
+  uptimeChecks         UptimeCheck[]
   apiKeys              ApiKey[]
   alerts               Alert[]
   alertRules           AlertRule[]
@@ -42,6 +44,7 @@ model User {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   memberships    OrganizationMember[]
   createdApiKeys ApiKey[]     @relation("ApiKeyCreatedBy")
+  createdServices MonitoredService[] @relation("ServiceCreatedBy")
   auditLogs      AuditLog[]
 
   @@index([organizationId])
@@ -115,6 +118,62 @@ model MonitoredInstance {
   @@index([awsAccountId])
   @@unique([organizationId, instanceId])
   @@map("monitored_instances")
+}
+
+model MonitoredService {
+  id                 String               @id @default(uuid())
+  organizationId     String
+  name               String
+  slug               String
+  description        String?
+  type               MonitoredServiceType
+  environment        String               @default("production")
+  url                String?
+  healthPath         String?
+  method             HealthCheckMethod    @default(GET)
+  expectedStatusCode Int                  @default(200)
+  timeoutMs          Int                  @default(5000)
+  intervalSeconds    Int                  @default(60)
+  isActive           Boolean              @default(true)
+  tags               Json?
+  currentStatus      UptimeStatus         @default(UNKNOWN)
+  lastCheckedAt      DateTime?
+  lastResponseTimeMs Int?
+  createdByUserId    String?
+  deletedAt          DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation("ServiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  uptimeChecks UptimeCheck[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@index([organizationId, deletedAt])
+  @@index([createdByUserId])
+  @@map("monitored_services")
+}
+
+model UptimeCheck {
+  id             String       @id @default(uuid())
+  organizationId String
+  serviceId      String
+  status         UptimeStatus @default(UNKNOWN)
+  httpStatusCode Int?
+  responseTimeMs Int?
+  errorMessage   String?      @db.VarChar(500)
+  checkedAt      DateTime     @default(now())
+  checkSource    String       @default("manual")
+  metadata       Json?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      MonitoredService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([serviceId])
+  @@index([organizationId, serviceId, checkedAt])
+  @@map("uptime_checks")
 }
 
 model ApiKey {
@@ -304,6 +363,26 @@ enum InstanceStatus {
   RUNNING
   STOPPED
   TERMINATED
+  UNKNOWN
+}
+
+enum MonitoredServiceType {
+  HTTP
+  API
+  WEB
+  EC2
+  CUSTOM
+}
+
+enum HealthCheckMethod {
+  GET
+  HEAD
+}
+
+enum UptimeStatus {
+  UP
+  DOWN
+  DEGRADED
   UNKNOWN
 }
 

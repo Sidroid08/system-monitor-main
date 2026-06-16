@@ -11,6 +11,7 @@ Express/Prisma control-plane backend for the Sidroid monitoring project.
 - JWT and bcrypt authentication
 - Organization membership and basic RBAC
 - Hashed organization-scoped API keys
+- Monitored service registry and manual HTTP uptime checks
 - Zod request validation
 - VictoriaMetrics query proxy
 
@@ -81,6 +82,12 @@ npm run db:check
 - `POST /api/api-keys`
 - `POST /api/api-keys/:id/revoke`
 - `DELETE /api/api-keys/:id`
+- `GET /api/services`
+- `POST /api/services`
+- `GET /api/services/:id`
+- `PATCH /api/services/:id`
+- `DELETE /api/services/:id`
+- `POST /api/services/:id/check`
 
 Most routes require a bearer token. Tenant-owned routes use the authenticated user's active organization membership.
 
@@ -113,6 +120,43 @@ Supported scopes:
 - `alerts:read`
 
 Use `API_KEY_PEPPER` in `.env` for API key hashing. Do not reuse production peppers across environments.
+
+## Service monitoring
+
+Services are organization-scoped records for customer-facing endpoints or monitored targets.
+
+Supported service types:
+
+- `HTTP`
+- `API`
+- `WEB`
+- `EC2`
+- `CUSTOM`
+
+Manual uptime checks currently support `HTTP`, `API`, and `WEB` services. They store status, response time, HTTP status code, and a truncated error message. They do not store response bodies.
+
+Example service:
+
+```json
+{
+  "name": "Public API",
+  "type": "HTTP",
+  "environment": "production",
+  "url": "https://api.example.com",
+  "healthPath": "/health",
+  "method": "GET",
+  "expectedStatusCode": 200,
+  "timeoutMs": 5000,
+  "intervalSeconds": 60
+}
+```
+
+Manual check:
+
+```bash
+curl -X POST http://localhost:5000/api/services/<service-id>/check \
+  -H "Authorization: Bearer <token>"
+```
 
 ## Migrations
 
