@@ -11,6 +11,7 @@ import {
   findServiceById,
 } from '../modules/services/services.repository.js';
 import { performHttpCheck } from '../modules/services/services.health.js';
+import { handleUptimeStateChange } from '../lib/uptimeAlerts.js';
 
 function parseJobData(data) {
   if (!data?.organizationId || !data?.serviceId) {
@@ -81,7 +82,12 @@ async function bootstrapWorker({ withScheduler = false } = {}) {
   await prisma.$connect();
 
   const workerConnection = createRedisConnection();
-  const worker = makeUptimeWorker({ connection: workerConnection });
+  const worker = makeUptimeWorker({
+    connection: workerConnection,
+    processorDeps: {
+      onCheckStored: (ctx) => handleUptimeStateChange(ctx),
+    },
+  });
   let schedulerConnection;
   let schedulerQueue;
   let scheduler;

@@ -10,6 +10,7 @@ import authRoutes from './modules/auth/auth.routes.js';
 import orgRoutes from './modules/organizations/org.routes.js';
 import awsRoutes from './modules/aws/aws.routes.js';
 import instanceRoutes from './modules/instances/instances.routes.js';
+import alertRoutes from './modules/alerts/alerts.routes.js';
 import alertRuleRoutes from './modules/alert-rules/alertRules.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import queryRoutes from './modules/query/query.routes.js';
@@ -54,6 +55,7 @@ export function createApp() {
   app.use('/api/org', orgRoutes);
   app.use('/api/aws', awsRoutes);
   app.use('/api/instances', instanceRoutes);
+  app.use('/api/alerts', alertRoutes);
   app.use('/api/alert-rules', alertRuleRoutes);
   app.use('/api/notification-channels', notificationRoutes);
   app.use('/api/query', queryRoutes);
