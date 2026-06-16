@@ -202,11 +202,58 @@ Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, 
 
 ---
 
+## Completed backend phases
+
+| Phase | What was built |
+|---|---|
+| Phase 0 | Repo audit and production roadmap |
+| Phase 1 | Foundation stabilization, test hygiene, secrets audit |
+| Phase 2 | Auth hardening, RBAC, org membership, API keys, audit logs |
+| Phase 3 | Monitored services, uptime checks, SSRF protection |
+| Phase 4 | Redis/BullMQ queue, scheduled uptime worker, Docker Compose |
+| Phase 5 | Uptime alert rules, cooldown/dedup, notification dispatch |
+| Phase 6 | **Incident management**: incident model, lifecycle, timeline, alert-to-incident integration |
+
+---
+
+## Phase 6: Incident Management
+
+Phase 6 adds production-style incident management on top of the alerting system.
+
+**Features:**
+- Incident model with 7-status lifecycle: OPEN → ACKNOWLEDGED → INVESTIGATING → IDENTIFIED → MONITORING → RESOLVED → CLOSED
+- Incident timeline events (CREATED, ACKNOWLEDGED, STATUS_CHANGED, ASSIGNED, COMMENTED, RESOLVED, CLOSED, ALERT_LINKED, ALERT_RECOVERED)
+- Alert-to-incident integration: triggered alerts automatically create incidents; resolved alerts add ALERT_RECOVERED events and move incidents to MONITORING
+- Postmortem fields: impactSummary, rootCause, resolutionSummary, preventionNotes
+- RBAC: VIEWER read-only, DEVELOPER create/ack/assign-self/comment/resolve, ADMIN/OWNER close + assign anyone
+- Full tenant isolation and audit logging
+
+**API routes:**
+```
+POST   /api/incidents
+GET    /api/incidents
+GET    /api/incidents/:id
+PATCH  /api/incidents/:id
+POST   /api/incidents/:id/acknowledge
+POST   /api/incidents/:id/assign
+POST   /api/incidents/:id/resolve
+POST   /api/incidents/:id/close
+POST   /api/incidents/:id/comments
+GET    /api/incidents/:id/timeline
+```
+
+See `docs/PHASE_6_NOTES.md` for full design documentation.
+
+---
+
 ## Next production upgrades
 
-- connect uptime checks to alert rule evaluation and notifications,
-- add `vmalert` for infrastructure alerting,
-- add TLS/reverse proxy,
-- add Grafana SSO,
-- add EC2 auto-discovery,
-- store configs in Git and manage with IaC.
+- Logs and metrics ingestion foundation (Phase 7)
+- API-key-authenticated ingest endpoints
+- VictoriaMetrics remote-write for custom metrics
+- Retention enforcement worker
+- add `vmalert` for infrastructure alerting
+- add TLS/reverse proxy
+- add Grafana SSO
+- add EC2 auto-discovery
+- store configs in Git and manage with IaC

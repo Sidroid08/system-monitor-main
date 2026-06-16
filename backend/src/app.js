@@ -18,6 +18,7 @@ import apiKeyRoutes from './modules/api-keys/apiKeys.routes.js';
 import serviceRoutes from './modules/services/services.routes.js';
 import uptimeAlertRuleRoutes from './modules/uptime-alert-rules/uptimeAlertRules.routes.js';
 import workerHealthRoutes from './modules/worker-health/workerHealth.routes.js';
+import incidentRoutes from './modules/incidents/incidents.routes.js';
 
 export function createApp() {
   const app = express();
@@ -64,6 +65,7 @@ export function createApp() {
   app.use('/api/services', serviceRoutes);
   app.use('/api/uptime-alert-rules', uptimeAlertRuleRoutes);
   app.use('/api/worker-health', workerHealthRoutes);
+  app.use('/api/incidents', incidentRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

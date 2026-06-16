@@ -12,6 +12,13 @@ import {
 } from '../modules/uptime-alert-rules/uptimeAlertRules.repository.js';
 import { dispatchAlert, dispatchAlertToChannel } from './notifier.js';
 import prisma from './prisma.js';
+import {
+  createIncident,
+  findActiveIncidentForRule,
+  findActiveIncidentByAlertId,
+  updateIncident,
+  createIncidentEvent,
+} from '../modules/incidents/incidents.repository.js';
 
 // ─── Pure condition evaluation ────────────────────────────────────────────────
 
@@ -113,6 +120,11 @@ async function evaluateOneRule(rule, service, check, now, deps) {
       metadata: { alertId: alert.id, serviceId: service.id, ruleType: rule.type },
     });
 
+    // Incident integration: create incident if none already active for this rule+service.
+    setImmediate(() =>
+      deps.createIncidentFromAlert({ alert, rule, service }).catch(() => {}),
+    );
+
     setImmediate(() => dispatchToRule(alert, rule, deps).catch(() => {}));
 
   } else {
@@ -129,6 +141,11 @@ async function evaluateOneRule(rule, service, check, now, deps) {
       resourceId: rule.id,
       metadata: { alertId: existing.id, serviceId: service.id, ruleType: rule.type },
     });
+
+    // Incident integration: add ALERT_RECOVERED event and move incident to MONITORING.
+    setImmediate(() =>
+      deps.notifyIncidentAlertRecovered({ alertId: existing.id, service, check }).catch(() => {}),
+    );
 
     const recoveryAlert = {
       ...existing,
@@ -187,6 +204,82 @@ async function handleFallback(service, check, deps) {
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
+// ─── Default incident integration hooks ──────────────────────────────────────
+
+async function defaultCreateIncidentFromAlert({ alert, rule, service }) {
+  const orgId = rule.organizationId;
+  const existing = await findActiveIncidentForRule(orgId, service.id, rule.id);
+  if (existing) return;
+
+  const incident = await createIncident({
+    organizationId:  orgId,
+    serviceId:       service.id,
+    alertId:         alert.id,
+    alertRuleId:     rule.id,
+    title:           `[${rule.type}] Service "${service.name}" is down`,
+    description:     alert.description,
+    severity:        mapAlertSeverityToIncident(rule.severity),
+    status:          'OPEN',
+    source:          'ALERT',
+    startedAt:       new Date(),
+  });
+
+  await createIncidentEvent({
+    organizationId: orgId,
+    incidentId:     incident.id,
+    actorUserId:    null,
+    type:           'CREATED',
+    message:        `Incident created automatically from alert: ${alert.title}`,
+    metadata:       { alertId: alert.id, alertRuleId: rule.id, ruleType: rule.type },
+  });
+
+  await createIncidentEvent({
+    organizationId: orgId,
+    incidentId:     incident.id,
+    actorUserId:    null,
+    type:           'ALERT_LINKED',
+    message:        `Alert "${alert.title}" linked to this incident`,
+    metadata:       { alertId: alert.id },
+  });
+}
+
+async function defaultNotifyIncidentAlertRecovered({ alertId, service, check }) {
+  const orgId = service.organizationId;
+  const incident = await findActiveIncidentByAlertId(orgId, alertId);
+  if (!incident) return;
+
+  await createIncidentEvent({
+    organizationId: orgId,
+    incidentId:     incident.id,
+    actorUserId:    null,
+    type:           'ALERT_RECOVERED',
+    message:        `Alert recovered — service status is now ${check.status}`,
+    metadata:       { alertId, status: check.status, responseTimeMs: check.responseTimeMs },
+  });
+
+  // Move to MONITORING if still in an early active state.
+  const promotableStatuses = ['OPEN', 'ACKNOWLEDGED', 'INVESTIGATING', 'IDENTIFIED'];
+  if (promotableStatuses.includes(incident.status)) {
+    await updateIncident(incident.id, orgId, { status: 'MONITORING' });
+
+    await createIncidentEvent({
+      organizationId: orgId,
+      incidentId:     incident.id,
+      actorUserId:    null,
+      type:           'STATUS_CHANGED',
+      message:        `Status moved to MONITORING after alert recovery`,
+      metadata:       { previousStatus: incident.status, newStatus: 'MONITORING' },
+    });
+  }
+}
+
+function mapAlertSeverityToIncident(alertSeverity) {
+  // AlertSeverity (LOW/MEDIUM/HIGH/CRITICAL) maps 1-to-1 to IncidentSeverity.
+  return alertSeverity ?? 'MEDIUM';
+}
+
+// ─── Public entry point ───────────────────────────────────────────────────────
+
 // Called by the uptime worker and manual check controller after each check is stored.
 // Accepts injectable deps for unit testing.
 export async function handleUptimeStateChange({ service, check }, deps = {}) {
@@ -222,21 +315,25 @@ export async function handleUptimeStateChange({ service, check }, deps = {}) {
     },
     writeAuditLog: auditLog = async () => {},
     conditionMet: conditionMetFn = conditionMet,
+    createIncidentFromAlert  = defaultCreateIncidentFromAlert,
+    notifyIncidentAlertRecovered = defaultNotifyIncidentAlertRecovered,
   } = deps;
 
   // Build a unified deps bundle for sub-functions.
   const resolvedDeps = {
-    findOpenAlertForRule:   findOpenAlertForRuleFn,
+    findOpenAlertForRule:        findOpenAlertForRuleFn,
     createAlertFn,
-    resolveAlertById:       resolveAlertByIdFn,
+    resolveAlertById:            resolveAlertByIdFn,
     updateRuleFiredAt,
     updateRuleResolvedAt,
     hasOpen,
     dispatch,
     resolveAlertsAndReturn,
     findChannelForDelivery,
-    writeAuditLog:          auditLog,
-    conditionMet:           conditionMetFn,
+    writeAuditLog:               auditLog,
+    conditionMet:                conditionMetFn,
+    createIncidentFromAlert,
+    notifyIncidentAlertRecovered,
   };
 
   const rules = await loadRules(service.organizationId, service.id);

@@ -25,6 +25,8 @@ model Organization {
   alertRules           AlertRule[]
   notificationChannels NotificationChannel[]
   uptimeAlertRules     UptimeAlertRule[]
+  incidents            Incident[]
+  incidentEvents       IncidentEvent[]
   syncLogs             SyncLog[]
   auditLogs            AuditLog[]
 
@@ -327,6 +329,63 @@ model UptimeAlertRule {
   @@map("uptime_alert_rules")
 }
 
+model Incident {
+  id                   String           @id @default(uuid())
+  organizationId       String
+  serviceId            String?
+  alertId              String?
+  alertRuleId          String?
+  title                String           @db.VarChar(255)
+  description          String?          @db.Text
+  severity             IncidentSeverity @default(MEDIUM)
+  status               IncidentStatus   @default(OPEN)
+  source               IncidentSource   @default(MANUAL)
+  assignedToUserId     String?
+  createdByUserId      String?
+  acknowledgedByUserId String?
+  resolvedByUserId     String?
+  acknowledgedAt       DateTime?
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+  startedAt            DateTime         @default(now())
+  impactSummary        String?          @db.Text
+  rootCause            String?          @db.Text
+  resolutionSummary    String?          @db.Text
+  preventionNotes      String?          @db.Text
+  metadata             Json?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events         IncidentEvent[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, serviceId])
+  @@index([organizationId, severity])
+  @@index([organizationId, startedAt])
+  @@index([alertId])
+  @@index([alertRuleId])
+  @@map("incidents")
+}
+
+model IncidentEvent {
+  id             String            @id @default(uuid())
+  organizationId String
+  incidentId     String
+  actorUserId    String?
+  type           IncidentEventType
+  message        String            @db.VarChar(1000)
+  metadata       Json?
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  incident     Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@index([organizationId, incidentId])
+  @@map("incident_events")
+}
+
 model SyncLog {
   id                  String     @id @default(uuid())
   organizationId      String
@@ -475,4 +534,40 @@ enum UptimeRuleType {
   SERVICE_DEGRADED
   RESPONSE_TIME_ABOVE
   CONSECUTIVE_FAILURES
+}
+
+enum IncidentSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  INVESTIGATING
+  IDENTIFIED
+  MONITORING
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentSource {
+  ALERT
+  MANUAL
+  SYSTEM
+}
+
+enum IncidentEventType {
+  CREATED
+  ACKNOWLEDGED
+  STATUS_CHANGED
+  ASSIGNED
+  COMMENTED
+  RESOLVED
+  CLOSED
+  ALERT_LINKED
+  ALERT_RECOVERED
+  SYSTEM_UPDATE
 }

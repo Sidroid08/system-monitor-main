@@ -98,6 +98,18 @@ npm run db:check
 - `DELETE /api/services/:id`
 - `POST /api/services/:id/check`
 - `GET /api/worker-health`
+- `GET /api/uptime-alert-rules`
+- `POST /api/uptime-alert-rules`
+- `GET /api/incidents`
+- `POST /api/incidents`
+- `GET /api/incidents/:id`
+- `PATCH /api/incidents/:id`
+- `POST /api/incidents/:id/acknowledge`
+- `POST /api/incidents/:id/assign`
+- `POST /api/incidents/:id/resolve`
+- `POST /api/incidents/:id/close`
+- `POST /api/incidents/:id/comments`
+- `GET /api/incidents/:id/timeline`
 
 Most routes require a bearer token. Tenant-owned routes use the authenticated user's active organization membership.
 
@@ -207,7 +219,24 @@ Validate the schema:
 DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma validate
 ```
 
-Apply migrations only after reviewing `docs/PHASE_2_NOTES.md`, `docs/PHASE_3_NOTES.md`, and `docs/PHASE_4_NOTES.md`.
+Apply migrations only after reviewing `docs/PHASE_2_NOTES.md`, `docs/PHASE_3_NOTES.md`, `docs/PHASE_4_NOTES.md`, `docs/PHASE_5_NOTES.md`, and `docs/PHASE_6_NOTES.md`.
+
+Phase 6 added two new tables (`incidents`, `incident_events`) and four new enums. The migration is additive — no existing columns are modified.
+
+## Incident management (Phase 6)
+
+Incidents represent tracked operational problems. They are separate from alerts (which are transient signals).
+
+**Lifecycle:** OPEN → ACKNOWLEDGED → INVESTIGATING → IDENTIFIED → MONITORING → RESOLVED → CLOSED
+
+**Alert-to-incident integration:** When an uptime alert rule fires, an incident is automatically created if no active incident already exists for that org/service/rule combination. When the alert recovers, a timeline event is written and the incident moves to MONITORING.
+
+**Role permissions:**
+- VIEWER: read incidents, read timeline
+- DEVELOPER: create, acknowledge, assign to self, comment, resolve
+- ADMIN/OWNER: assign anyone in org, close
+
+See `docs/PHASE_6_NOTES.md` for full design documentation.
 
 ## Security notes
 
