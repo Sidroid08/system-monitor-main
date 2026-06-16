@@ -13,6 +13,8 @@ Express/Prisma control-plane backend for the Sidroid monitoring project.
 - Hashed organization-scoped API keys
 - Monitored service registry, manual HTTP checks, and scheduled uptime workers
 - Redis/BullMQ for background uptime jobs
+- API-key-authenticated logs and metrics ingestion
+- JWT-protected telemetry query APIs
 - Zod request validation
 - VictoriaMetrics query proxy
 
@@ -110,6 +112,12 @@ npm run db:check
 - `POST /api/incidents/:id/close`
 - `POST /api/incidents/:id/comments`
 - `GET /api/incidents/:id/timeline`
+- `POST /api/ingest/logs`
+- `POST /api/ingest/metrics`
+- `GET /api/logs`
+- `GET /api/logs/:id`
+- `GET /api/metrics`
+- `GET /api/metrics/names`
 
 Most routes require a bearer token. Tenant-owned routes use the authenticated user's active organization membership.
 
@@ -142,6 +150,13 @@ Supported scopes:
 - `alerts:read`
 
 Use `API_KEY_PEPPER` in `.env` for API key hashing. Do not reuse production peppers across environments.
+
+Telemetry ingestion requires scoped API keys:
+
+- `POST /api/ingest/logs`: `logs:write`
+- `POST /api/ingest/metrics`: `metrics:write`
+
+The API key organization is the tenant source of truth for ingestion. Clients must not send `organizationId`.
 
 ## Service monitoring
 
@@ -211,6 +226,53 @@ Local Compose from `docker/` can start MySQL, Redis, and the metrics stack:
 docker compose --env-file .env.example up -d mysql redis victoriametrics vmagent grafana
 ```
 
+## Telemetry ingestion and query APIs (Phase 7)
+
+Ingestion routes use API key auth:
+
+```bash
+curl -X POST http://localhost:5000/api/ingest/logs \
+  -H "X-Api-Key: <api-key-with-logs-write>" \
+  -H "Content-Type: application/json" \
+  -d '{"level":"ERROR","message":"checkout failed","timestamp":"2026-06-16T12:00:00.000Z"}'
+```
+
+```bash
+curl -X POST http://localhost:5000/api/ingest/metrics \
+  -H "X-Api-Key: <api-key-with-metrics-write>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"checkout_latency_ms","type":"GAUGE","value":182.4,"timestamp":"2026-06-16T12:00:00.000Z"}'
+```
+
+Query routes use JWT auth and are available to active organization members, including `VIEWER`:
+
+- `GET /api/logs`
+- `GET /api/logs/:id`
+- `GET /api/metrics`
+- `GET /api/metrics/names`
+
+Telemetry retention environment:
+
+```text
+LOG_RETENTION_DAYS=30
+METRIC_RETENTION_DAYS=30
+TELEMETRY_RETENTION_BATCH_SIZE=1000
+```
+
+Run manual retention cleanup:
+
+```bash
+npm run telemetry:cleanup
+```
+
+Known limitations:
+
+- No ingestion rate limiting yet.
+- No VictoriaMetrics forwarding yet.
+- No integration tests with real MySQL yet.
+- Retention cleanup is manual/global, not per-org or scheduled.
+- Log search uses simple MySQL `LIKE`; it is not full-text indexed yet.
+
 ## Migrations
 
 Validate the schema:
@@ -219,9 +281,17 @@ Validate the schema:
 DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma validate
 ```
 
-Apply migrations only after reviewing `docs/PHASE_2_NOTES.md`, `docs/PHASE_3_NOTES.md`, `docs/PHASE_4_NOTES.md`, `docs/PHASE_5_NOTES.md`, and `docs/PHASE_6_NOTES.md`.
+Apply migrations only after reviewing `docs/PHASE_2_NOTES.md`, `docs/PHASE_3_NOTES.md`, `docs/PHASE_4_NOTES.md`, `docs/PHASE_5_NOTES.md`, `docs/PHASE_6_NOTES.md`, and `docs/PHASE_7_NOTES.md`.
 
-Phase 6 added two new tables (`incidents`, `incident_events`) and four new enums. The migration is additive — no existing columns are modified.
+Apply pending migrations in a deployed environment with:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma migrate deploy
+```
+
+Phase 7 adds `log_entries` and `metric_samples` through `backend/prisma/migrations/20260616050000_phase7_telemetry_ingestion/migration.sql`.
+
+Pre-production blocker: this branch contains Phase 6 incident models in `schema.prisma`, but no matching Phase 6 incident migration directory was found under `backend/prisma/migrations`.
 
 ## Incident management (Phase 6)
 

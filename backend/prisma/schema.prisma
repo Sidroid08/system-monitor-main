@@ -407,9 +407,9 @@ model LogEntry {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId, timestamp])
-  @@index([organizationId, serviceId, timestamp])
-  @@index([organizationId, level, timestamp])
+  @@index([organizationId, timestamp, id])
+  @@index([organizationId, serviceId, timestamp, id])
+  @@index([organizationId, level, timestamp, id])
   @@map("log_entries")
 }
 
@@ -429,8 +429,8 @@ model MetricSample {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId, name, timestamp])
-  @@index([organizationId, serviceId, timestamp])
+  @@index([organizationId, name, timestamp, id])
+  @@index([organizationId, serviceId, timestamp, id])
   @@map("metric_samples")
 }
 

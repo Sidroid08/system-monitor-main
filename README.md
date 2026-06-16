@@ -170,6 +170,9 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - Phase 2 auth/RBAC/multitenancy notes: `docs/PHASE_2_NOTES.md`
 - Phase 3 service uptime monitoring notes: `docs/PHASE_3_NOTES.md`
 - Phase 4 scheduled uptime worker notes: `docs/PHASE_4_NOTES.md`
+- Phase 5 alerting notes: `docs/PHASE_5_NOTES.md`
+- Phase 6 incident management notes: `docs/PHASE_6_NOTES.md`
+- Phase 7 telemetry ingestion notes: `docs/PHASE_7_NOTES.md`
 - Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
@@ -178,7 +181,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 4 adds Redis/BullMQ scheduled uptime workers on top of the tenant-scoped monitored services from Phase 3. See the phase notes and roadmap before adding ingestion, incidents, status pages, or AI features.
+This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 7 adds the telemetry ingestion foundation: API-key-authenticated log and metric ingestion, JWT-protected query APIs, MySQL-backed telemetry storage, and a manual retention cleanup script. See the phase notes and roadmap before adding Phase 8 features such as VictoriaMetrics forwarding, dashboards, quotas, or status pages.
 
 ---
 
@@ -213,6 +216,7 @@ Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, 
 | Phase 4 | Redis/BullMQ queue, scheduled uptime worker, Docker Compose |
 | Phase 5 | Uptime alert rules, cooldown/dedup, notification dispatch |
 | Phase 6 | **Incident management**: incident model, lifecycle, timeline, alert-to-incident integration |
+| Phase 7 | **Telemetry ingestion**: logs/metrics ingest via API keys, JWT query APIs, retention cleanup |
 
 ---
 
@@ -246,11 +250,36 @@ See `docs/PHASE_6_NOTES.md` for full design documentation.
 
 ---
 
+## Phase 7: Telemetry Ingestion
+
+Phase 7 adds a MySQL-backed ingestion foundation for service logs and custom metric samples.
+
+**Features:**
+- API-key-authenticated ingestion endpoints for logs and metrics.
+- Required ingestion scopes: `logs:write` and `metrics:write`.
+- JWT-protected query APIs for logs, log detail, metric samples, and metric names.
+- Tenant isolation from API key organization scope for ingest and JWT organization scope for reads.
+- Sensitive telemetry attribute/tag redaction before storage.
+- Manual retention cleanup script: `npm run telemetry:cleanup`.
+
+**API routes:**
+```
+POST /api/ingest/logs
+POST /api/ingest/metrics
+GET  /api/logs
+GET  /api/logs/:id
+GET  /api/metrics
+GET  /api/metrics/names
+```
+
+See `docs/PHASE_7_NOTES.md` for migration notes, environment variables, pagination behavior, and known production gaps.
+
+---
+
 ## Next production upgrades
 
-- Logs and metrics ingestion foundation (Phase 7)
-- API-key-authenticated ingest endpoints
 - VictoriaMetrics remote-write for custom metrics
+- API rate limiting and per-org telemetry quotas
 - Retention enforcement worker
 - add `vmalert` for infrastructure alerting
 - add TLS/reverse proxy

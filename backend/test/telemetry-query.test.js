@@ -10,6 +10,11 @@ const { listLogsQuerySchema } = await import('../src/modules/logs/logs.schemas.j
 const { listMetricsQuerySchema, listMetricNamesQuerySchema } = await import('../src/modules/metrics/metrics.schemas.js');
 const { makeLogsController }    = await import('../src/modules/logs/logs.controller.js');
 const { makeMetricsController } = await import('../src/modules/metrics/metrics.controller.js');
+const {
+  buildTimestampCursorWhere,
+  decodeTelemetryCursor,
+  encodeTelemetryCursor,
+} = await import('../src/utils/telemetryCursor.js');
 
 // ─── UUIDs ────────────────────────────────────────────────────────────────────
 
@@ -222,6 +227,32 @@ test('listLogs — pagination cursor forwarded', async () => {
   await listLogs(req, res);
 
   assert.equal(capturedOpts.cursor, 'some-cursor-id');
+});
+
+test('telemetry cursor encodes timestamp and id for stable pagination', () => {
+  const timestamp = new Date('2026-06-16T12:00:00.000Z');
+  const cursor = encodeTelemetryCursor({ id: LOG_1, timestamp });
+  const decoded = decodeTelemetryCursor(cursor);
+
+  assert.equal(decoded.id, LOG_1);
+  assert.equal(decoded.timestamp.toISOString(), timestamp.toISOString());
+});
+
+test('telemetry cursor builds timestamp and id keyset filter', () => {
+  const timestamp = new Date('2026-06-16T12:00:00.000Z');
+  const cursor = encodeTelemetryCursor({ id: LOG_1, timestamp });
+  const where = buildTimestampCursorWhere(cursor);
+
+  assert.deepEqual(where, {
+    OR: [
+      { timestamp: { lt: timestamp } },
+      { timestamp, id: { lt: LOG_1 } },
+    ],
+  });
+});
+
+test('telemetry cursor rejects malformed cursor values', () => {
+  assert.throws(() => decodeTelemetryCursor('not-a-valid-cursor'), /Invalid pagination cursor/);
 });
 
 // ─── Logs controller: getLog ──────────────────────────────────────────────────

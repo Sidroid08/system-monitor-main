@@ -81,9 +81,9 @@ Ingestion routes use the existing `authenticateApiKey` middleware from Phase 2 p
 | createdAt | DateTime | Auto |
 
 **Indexes:**
-- `(organizationId, timestamp)` — primary time-range queries
-- `(organizationId, serviceId, timestamp)` — service-scoped queries
-- `(organizationId, level, timestamp)` — severity filtering
+- `(organizationId, timestamp, id)` - primary time-range queries and stable cursor pagination
+- `(organizationId, serviceId, timestamp, id)` - service-scoped queries
+- `(organizationId, level, timestamp, id)` - severity filtering
 
 **Message limit:** Truncated to 5000 chars at ingest. Originals longer than 5000 chars are silently truncated with no error.
 
@@ -112,8 +112,8 @@ Ingestion routes use the existing `authenticateApiKey` middleware from Phase 2 p
 | createdAt | DateTime | Auto |
 
 **Indexes:**
-- `(organizationId, name, timestamp)` — metric time-series queries
-- `(organizationId, serviceId, timestamp)` — service-scoped queries
+- `(organizationId, name, timestamp, id)` - metric time-series queries and stable cursor pagination
+- `(organizationId, serviceId, timestamp, id)` - service-scoped queries
 
 **Metric name pattern:** Must match `/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,199}$/` (Prometheus-compatible).
 
@@ -147,8 +147,8 @@ Ingestion routes use the existing `authenticateApiKey` middleware from Phase 2 p
 ### GET /api/logs
 
 - **Auth:** JWT user (VIEWER+)
-- **Filters:** `serviceId`, `level`, `startTime`, `endTime`, `search` (message LIKE), `limit` (max 500, default 50), `cursor` (id for keyset pagination)
-- **Sort:** `timestamp DESC`
+- **Filters:** `serviceId`, `level`, `from`, `to`, `search` (message LIKE), `limit` (max 500, default 50), `cursor` (opaque timestamp+id keyset cursor)
+- **Sort:** `timestamp DESC, id DESC`
 - **Tenant isolation:** `organizationId` always from JWT
 
 ### GET /api/logs/:id
@@ -159,8 +159,8 @@ Ingestion routes use the existing `authenticateApiKey` middleware from Phase 2 p
 ### GET /api/metrics
 
 - **Auth:** JWT user (VIEWER+)
-- **Filters:** `serviceId`, `name`, `startTime`, `endTime`, `limit` (max 500, default 50), `cursor`
-- **Sort:** `timestamp DESC`
+- **Filters:** `serviceId`, `name`, `from`, `to`, `limit` (max 500, default 50), `cursor` (opaque timestamp+id keyset cursor)
+- **Sort:** `timestamp DESC, id DESC`
 
 ### GET /api/metrics/names
 
@@ -238,31 +238,39 @@ npm run telemetry:cleanup
 **New enums:** `LogLevel`, `LogIngestionSource`, `MetricType`, `MetricIngestionSource`
 **Existing tables:** `Organization` updated with new relation fields
 
-Migration is additive — no existing columns modified. Safe to apply to a Phase 6 database:
+Migration file:
+
+- `backend/prisma/migrations/20260616050000_phase7_telemetry_ingestion/migration.sql`
+
+Migration is additive - no existing columns modified. Safe to apply to a Phase 6 database after the Phase 6 incident migration exists:
 
 ```bash
 cd backend
 DATABASE_URL="mysql://..." npx prisma migrate deploy
 ```
 
-Dev reset:
+Dev migration status check:
 ```bash
-DATABASE_URL="mysql://..." npx prisma migrate dev --name phase7_telemetry_ingestion
+DATABASE_URL="mysql://..." npx prisma migrate status
 ```
+
+Repair-pass finding: Phase 6 incident models (`Incident`, `IncidentEvent`, incident enums) are present in `schema.prisma`, but no matching Phase 6 incident migration directory was found under `backend/prisma/migrations`. Treat that as a separate pre-production deployment blocker.
 
 ---
 
 ## Known limitations
 
-1. No VictoriaMetrics forwarding in Phase 7 (Option A chosen — MySQL-first)
-2. No per-org retention configuration
-3. No quota enforcement (bytes/rows per org)
-4. Log search is simple MySQL LIKE (not full-text index) — adequate for small scale
-5. Metrics are raw samples only — no aggregation or rollup
-6. No streaming ingest (HTTP only, no WebSocket or gRPC)
-7. No ingest pipeline validation for PAN/SSN/email in values
-8. Batch ingestion does not support idempotent re-delivery (no dedup key)
-9. Telemetry cleanup must be run as an external cron — no automatic scheduler
+1. No VictoriaMetrics forwarding in Phase 7 (Option A chosen - MySQL-first)
+2. No ingestion rate limiting yet
+3. No integration tests with a real MySQL database yet
+4. No per-org retention configuration
+5. No quota enforcement (bytes/rows per org)
+6. Log search is simple MySQL LIKE (not full-text index) - adequate for small scale
+7. Metrics are raw samples only - no aggregation or rollup
+8. No streaming ingest (HTTP only, no WebSocket or gRPC)
+9. No ingest pipeline validation for PAN/SSN/email in values
+10. Batch ingestion does not support idempotent re-delivery (no dedup key)
+11. Telemetry cleanup must be run as an external cron - no automatic scheduler
 
 ---
 
