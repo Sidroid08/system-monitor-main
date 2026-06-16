@@ -66,3 +66,24 @@ export async function hasOpenUptimeAlert(organizationId, serviceId) {
   });
   return count > 0;
 }
+
+// Find an open alert that was fired by a specific UptimeAlertRule.
+export async function findOpenAlertForRule(organizationId, uptimeRuleId) {
+  return prisma.alert.findFirst({
+    where: {
+      organizationId,
+      source: 'uptime-rule',
+      status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+      labels: { contains: `"uptimeRuleId":"${uptimeRuleId}"` },
+    },
+    select: alertSelect,
+  });
+}
+
+// Resolve a single alert by id (used when a rule's condition clears).
+export async function resolveAlertById(id, organizationId) {
+  return prisma.alert.updateMany({
+    where: { id, organizationId },
+    data: { status: 'RESOLVED', resolvedAt: new Date() },
+  });
+}

@@ -16,6 +16,7 @@ import notificationRoutes from './modules/notifications/notifications.routes.js'
 import queryRoutes from './modules/query/query.routes.js';
 import apiKeyRoutes from './modules/api-keys/apiKeys.routes.js';
 import serviceRoutes from './modules/services/services.routes.js';
+import uptimeAlertRuleRoutes from './modules/uptime-alert-rules/uptimeAlertRules.routes.js';
 import workerHealthRoutes from './modules/worker-health/workerHealth.routes.js';
 
 export function createApp() {
@@ -61,6 +62,7 @@ export function createApp() {
   app.use('/api/query', queryRoutes);
   app.use('/api/api-keys', apiKeyRoutes);
   app.use('/api/services', serviceRoutes);
+  app.use('/api/uptime-alert-rules', uptimeAlertRuleRoutes);
   app.use('/api/worker-health', workerHealthRoutes);
 
   app.use(notFoundHandler);

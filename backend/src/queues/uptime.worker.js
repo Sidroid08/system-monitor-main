@@ -50,7 +50,11 @@ export async function processUptimeCheckJob(job, deps = {}) {
     checkSource: source,
   });
 
-  await onCheckStored({ service, check, source });
+  try {
+    await onCheckStored({ service, check, source });
+  } catch {
+    // Notification failure must not cause a BullMQ job retry.
+  }
 
   return {
     skipped: false,

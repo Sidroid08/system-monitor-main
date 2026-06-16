@@ -43,6 +43,7 @@ export function makeServicesController(deps = {}) {
   };
   const checker = deps.performHttpCheck ?? performHttpCheck;
   const audit = deps.writeAuditLog ?? writeAuditLog;
+  const onCheckStored = deps.onCheckStored ?? null;
 
   return {
     async create(req, res) {
@@ -129,6 +130,11 @@ export function makeServicesController(deps = {}) {
       const result = await checker(service);
       const check = await repo.createUptimeCheck(req.user.organizationId, service.id, result);
 
+      // Fire-and-forget: notification failure must not fail the check response.
+      if (onCheckStored) {
+        setImmediate(() => onCheckStored({ service, check }).catch(() => {}));
+      }
+
       await audit({
         req,
         organizationId: req.user.organizationId,
@@ -143,4 +149,15 @@ export function makeServicesController(deps = {}) {
   };
 }
 
-export const { create, list, get, update, remove, check } = makeServicesController();
+// Lazily resolve the uptime alert hook to avoid a circular import at module load.
+// The function is imported here rather than at top-level so the import chain
+// (services.controller → uptimeAlerts → alerts.repository → prisma) only
+// executes when the server or worker actually instantiates the controller.
+async function defaultOnCheckStored(ctx) {
+  const { handleUptimeStateChange } = await import('../../lib/uptimeAlerts.js');
+  return handleUptimeStateChange(ctx);
+}
+
+export const { create, list, get, update, remove, check } = makeServicesController({
+  onCheckStored: defaultOnCheckStored,
+});

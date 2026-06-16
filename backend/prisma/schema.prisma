@@ -24,6 +24,7 @@ model Organization {
   alerts               Alert[]
   alertRules           AlertRule[]
   notificationChannels NotificationChannel[]
+  uptimeAlertRules     UptimeAlertRule[]
   syncLogs             SyncLog[]
   auditLogs            AuditLog[]
 
@@ -45,6 +46,7 @@ model User {
   memberships    OrganizationMember[]
   createdApiKeys ApiKey[]     @relation("ApiKeyCreatedBy")
   createdServices MonitoredService[] @relation("ServiceCreatedBy")
+  createdUptimeAlertRules UptimeAlertRule[] @relation("UptimeRuleCreatedBy")
   auditLogs      AuditLog[]
 
   @@index([organizationId])
@@ -148,9 +150,10 @@ model MonitoredService {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    User?         @relation("ServiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  uptimeChecks UptimeCheck[]
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy         User?             @relation("ServiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  uptimeChecks      UptimeCheck[]
+  uptimeAlertRules  UptimeAlertRule[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -281,10 +284,47 @@ model NotificationChannel {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uptimeAlertRules  UptimeAlertRule[]
 
   @@index([organizationId])
   @@map("notification_channels")
+}
+
+// Uptime-specific alert rule evaluated after each HTTP/API/WEB uptime check.
+// Complements the PromQL-based AlertRule (which targets VictoriaMetrics metrics).
+model UptimeAlertRule {
+  id                    String         @id @default(uuid())
+  organizationId        String
+  // null = rule applies to every schedulable service in the org.
+  serviceId             String?
+  name                  String
+  type                  UptimeRuleType
+  severity              AlertSeverity  @default(MEDIUM)
+  isActive              Boolean        @default(true)
+  // RESPONSE_TIME_ABOVE: threshold in ms. CONSECUTIVE_FAILURES: minimum count.
+  // Not used by SERVICE_DOWN / SERVICE_DEGRADED.
+  threshold             Int?
+  // Minimum seconds between alert notifications for this rule (spam guard).
+  cooldownSeconds       Int            @default(300)
+  // null = dispatch to all active org channels.
+  notificationChannelId String?
+  createdByUserId       String?
+  // Engine-managed timestamps.
+  lastFiredAt           DateTime?
+  lastResolvedAt        DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service             MonitoredService?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  notificationChannel NotificationChannel? @relation(fields: [notificationChannelId], references: [id], onDelete: SetNull)
+  createdBy           User?                @relation("UptimeRuleCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, serviceId])
+  @@index([organizationId, isActive])
+  @@map("uptime_alert_rules")
 }
 
 model SyncLog {
@@ -428,4 +468,11 @@ enum SyncStatus {
   STARTED
   SUCCESS
   FAILED
+}
+
+enum UptimeRuleType {
+  SERVICE_DOWN
+  SERVICE_DEGRADED
+  RESPONSE_TIME_ABOVE
+  CONSECUTIVE_FAILURES
 }
