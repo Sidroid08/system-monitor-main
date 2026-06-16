@@ -74,6 +74,13 @@ export const env = {
   // File-based service discovery target directory written after each AWS sync.
   targetsDirPath: process.env.TARGETS_DIR_PATH ?? defaultTargetsDir,
 
+  // Telemetry ingestion retention.
+  telemetry: {
+    logRetentionDays: Number(process.env.LOG_RETENTION_DAYS ?? 30),
+    metricRetentionDays: Number(process.env.METRIC_RETENTION_DAYS ?? 30),
+    retentionBatchSize: Number(process.env.TELEMETRY_RETENTION_BATCH_SIZE ?? 1000),
+  },
+
   // SMTP for email notifications (optional — notifications fall back to Slack/webhook if absent).
   smtp: {
     host: process.env.SMTP_HOST ?? '',

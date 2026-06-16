@@ -27,6 +27,8 @@ model Organization {
   uptimeAlertRules     UptimeAlertRule[]
   incidents            Incident[]
   incidentEvents       IncidentEvent[]
+  logEntries           LogEntry[]
+  metricSamples        MetricSample[]
   syncLogs             SyncLog[]
   auditLogs            AuditLog[]
 
@@ -386,6 +388,52 @@ model IncidentEvent {
   @@map("incident_events")
 }
 
+model LogEntry {
+  id              String            @id @default(uuid())
+  organizationId  String
+  serviceId       String?
+  level           LogLevel          @default(INFO)
+  message         String            @db.VarChar(5000)
+  timestamp       DateTime
+  source          String?           @db.VarChar(100)
+  environment     String?           @db.VarChar(50)
+  traceId         String?           @db.VarChar(128)
+  spanId          String?           @db.VarChar(64)
+  requestId       String?           @db.VarChar(128)
+  attributes      Json?
+  ingestionSource LogIngestionSource @default(API_KEY)
+  receivedAt      DateTime          @default(now())
+  createdAt       DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, timestamp])
+  @@index([organizationId, serviceId, timestamp])
+  @@index([organizationId, level, timestamp])
+  @@map("log_entries")
+}
+
+model MetricSample {
+  id              String               @id @default(uuid())
+  organizationId  String
+  serviceId       String?
+  name            String               @db.VarChar(200)
+  type            MetricType           @default(GAUGE)
+  value           Float
+  unit            String?              @db.VarChar(50)
+  timestamp       DateTime
+  tags            Json?
+  ingestionSource MetricIngestionSource @default(API_KEY)
+  receivedAt      DateTime             @default(now())
+  createdAt       DateTime             @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, name, timestamp])
+  @@index([organizationId, serviceId, timestamp])
+  @@map("metric_samples")
+}
+
 model SyncLog {
   id                  String     @id @default(uuid())
   organizationId      String
@@ -570,4 +618,30 @@ enum IncidentEventType {
   ALERT_LINKED
   ALERT_RECOVERED
   SYSTEM_UPDATE
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+enum LogIngestionSource {
+  API_KEY
+  SYSTEM
+  WORKER
+}
+
+enum MetricType {
+  GAUGE
+  COUNTER
+  HISTOGRAM
+}
+
+enum MetricIngestionSource {
+  API_KEY
+  SYSTEM
+  WORKER
 }
