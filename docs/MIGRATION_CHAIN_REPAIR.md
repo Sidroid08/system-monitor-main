@@ -99,30 +99,58 @@ Then confirm these tables exist:
 - `incident_events`
 - `log_entries`
 - `metric_samples`
+- `uptime_alert_rules`
+- `monitored_services`
+- `uptime_checks`
 
 ## Verification Result In This Environment
 
-Passed:
+Verified on 2026-06-16 against Docker MySQL from `docker/docker-compose.yml` and `docker/.env.example`.
+
+Environment note:
+
+- The base Compose MySQL service maps `3306:3306`.
+- Local port `3306` was already owned by a host `mysqld` process, so the default `docker compose up -d mysql` could not bind the port.
+- Initial command that failed: `docker compose -f docker/docker-compose.yml --env-file docker/.env.example up -d mysql`
+- Error: `ports are not available: exposing port TCP 0.0.0.0:3306 -> 127.0.0.1:0: listen tcp 0.0.0.0:3306: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.`
+- Likely cause: an existing local MySQL server was already listening on host port `3306`.
+- Recommended fix: stop or reconfigure the host MySQL process for local Compose use, or make the Compose host port configurable, for example `${MYSQL_HOST_PORT:-3306}:3306`.
+- To avoid disturbing the existing local MySQL process, verification used the same Compose MySQL service with a temporary local override outside the repository:
+  - container: `sidroid-mysql-verify`
+  - host port: `3307`
+  - disposable database: `sidroid_migration_verify`
+
+Migration verification:
+
+- `npx prisma migrate status` before deploy correctly reported 8 pending migrations on the empty database.
+- `npx prisma migrate deploy` applied all 8 migrations successfully:
+  - `20260327055638_init`
+  - `20260616000000_phase1_schema_alignment`
+  - `20260616010000_auth_rbac_multitenancy`
+  - `20260616020000_service_uptime_monitoring`
+  - `20260616030000_scheduled_uptime_workers`
+  - `20260616040000_phase5_uptime_alert_rules`
+  - `20260616045000_phase6_incident_management`
+  - `20260616050000_phase7_telemetry_ingestion`
+- `npx prisma migrate status` after deploy passed with `Database schema is up to date!`
+
+Required tables confirmed in the fresh database:
+
+- `incidents`
+- `incident_events`
+- `log_entries`
+- `metric_samples`
+- `uptime_alert_rules`
+- `monitored_services`
+- `uptime_checks`
+
+Additional checks passed:
 
 - `npx prisma validate`
 - `npx prisma generate`
 - `npm run lint`
 - `npm test`
 - `docker compose -f docker/docker-compose.yml --env-file docker/.env.example config`
-
-Not verified:
-
-- `npx prisma migrate status`
-- fresh database `npx prisma migrate deploy`
-
-Reason:
-
-- TCP port `localhost:3306` was reachable.
-- Prisma authentication failed for the documented local placeholder `sidroid_user`.
-- Prisma authentication also failed for the documented local root placeholder.
-- The MySQL CLI is not installed in this environment.
-
-Do not treat migration deployment as fully verified until `migrate status` and a fresh local/dev `migrate deploy` pass with valid local credentials.
 
 ## Remaining Limitations
 
