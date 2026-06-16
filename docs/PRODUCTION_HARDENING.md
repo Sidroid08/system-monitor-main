@@ -125,6 +125,16 @@ RUN_INTEGRATION_TESTS=true DATABASE_URL=mysql://... npm run test:integration
 
 They are intended for disposable MySQL databases only. They verify migration deployment, required tables, telemetry insert/query behavior, raw SQL metric aggregation, log statistics, and tenant scoping.
 
+## Demo Seed
+
+Phase 10 adds a local demo seed command:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm run seed
+```
+
+The seed creates placeholder demo users, services, uptime checks, logs, metrics, alert rules, an alert, and an incident timeline. It does not generate or print a raw API key.
+
 ## Docker Deployment Overview
 
 The backend image is built from `backend/Dockerfile`.
@@ -232,3 +242,5 @@ That can affect `npm audit`, Prisma engine downloads, and Docker image builds th
 - No frontend dashboard.
 - No AI incident summaries.
 - No IaC for cloud deployment.
+
+See `docs/PRODUCTION_READINESS_CHECKLIST.md` for the recruiter-facing pass/fail checklist.

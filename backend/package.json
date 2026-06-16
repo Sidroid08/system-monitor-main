@@ -15,6 +15,7 @@
     "worker:uptime": "node src/queues/uptime.worker.js",
     "scheduler:uptime": "node src/queues/uptime.scheduler.js",
     "sync": "node scripts/manualSync.js",
+    "seed": "node scripts/seedDemo.js",
     "db:check": "node scripts/checkPrisma.js",
     "db:verify-migrations": "node scripts/verifyMigrations.js",
     "telemetry:cleanup": "node src/queues/telemetry.retention.js"

@@ -77,6 +77,16 @@ npm run db:check
 
 `db:check` requires a reachable database and should not be treated as a unit test.
 
+## Demo seed
+
+Phase 10 adds a safe local demo seed script:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npm run seed
+```
+
+It creates a `sidroid-demo` organization, local demo users, monitored services, uptime checks, logs, metrics, alert rules, a sample alert, and a sample incident timeline. It does not print a raw API key. Create a disposable API key through `POST /api/api-keys` for ingestion demos.
+
 ## Main API routes
 
 - `GET /health`
@@ -392,17 +402,19 @@ Build the backend image from the repository root:
 docker build -f backend/Dockerfile backend
 ```
 
+In this local environment, Docker image build currently fails during container `npm ci` with `npm error Exit handler never called!`. `npm audit --omit=dev` separately fails with `unable to verify the first certificate`, so fix the local/container Node/npm CA trust chain before claiming the image build or audit passes. Do not use an insecure permanent TLS bypass in the Dockerfile.
+
 `docker/docker-compose.yml` can run the backend API and worker alongside MySQL, Redis, VictoriaMetrics, vmagent, and Grafana. The worker uses the same image with `npm run worker`.
 
 GitHub Actions in `.github/workflows/ci.yml` runs lint, unit tests, Prisma validation/generation, Compose config validation, Docker build, and MySQL integration tests.
 
-See `../docs/PRODUCTION_HARDENING.md` and `../docker/README.md`.
+See `../docs/PRODUCTION_HARDENING.md`, `../docs/DEMO_GUIDE.md`, and `../docker/README.md`.
 
 ## Incident management (Phase 6)
 
 Incidents represent tracked operational problems. They are separate from alerts (which are transient signals).
 
-**Lifecycle:** OPEN → ACKNOWLEDGED → INVESTIGATING → IDENTIFIED → MONITORING → RESOLVED → CLOSED
+**Lifecycle:** OPEN -> ACKNOWLEDGED -> INVESTIGATING -> IDENTIFIED -> MONITORING -> RESOLVED -> CLOSED
 
 **Alert-to-incident integration:** When an uptime alert rule fires, an incident is automatically created if no active incident already exists for that org/service/rule combination. When the alert recovers, a timeline event is written and the incident moves to MONITORING.
 

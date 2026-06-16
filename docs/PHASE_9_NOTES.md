@@ -272,3 +272,5 @@ Phase 10 should focus on recruiter/demo readiness:
 - screenshots or demo script
 - final deployment walkthrough
 - concise recruiter-facing project narrative
+
+Phase 10 should keep the Docker `npm ci` failure and `npm audit` certificate limitation visible until the local/container CA trust chain is fixed.

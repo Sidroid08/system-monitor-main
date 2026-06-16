@@ -1,346 +1,460 @@
-# Multi-Organization Monitoring System
+# Sidroid Monitoring System
 
-A production-ready starter project for monitoring **multiple organizations (AWS accounts)** with:
+A production-style multi-tenant observability SaaS for monitoring services, uptime, logs, metrics, alerts, incidents, and dashboards.
 
-- Grafana
-- VictoriaMetrics
-- vmagent
-- Node Exporter
-- Docker Compose
-- Linux shell automation
+Sidroid started as an infrastructure monitoring stack and has been expanded into a production-grade foundation for a backend observability platform. It is built to demonstrate SaaS architecture, tenant isolation, background workers, telemetry ingestion, incident management, and deployment discipline without pretending to be a finished commercial product.
 
-Each organization can contain services such as EC2, and each EC2 node exposes metrics that are labeled and filtered in Grafana.
+## Why This Project Exists
 
----
+Modern engineering teams need more than raw metrics. They need a control plane where teams can register services, collect telemetry, evaluate health, alert the right people, and track incidents through resolution. Sidroid models that full backend workflow in a focused portfolio project:
 
-## Included features
+- teams and organizations can be isolated as tenants,
+- services can be monitored manually or by workers,
+- logs and metrics can be ingested through scoped API keys,
+- alerts can create incidents,
+- dashboards can query summary APIs,
+- production hardening is documented honestly.
 
-- Multi-organization metric model: `organization_id`, `organization_name`, `service`, `node`, `instance`
-- VictoriaMetrics as the metrics backend
-- vmagent scraping and forwarding
-- Grafana auto-provisioned datasource and dashboard
-- Dynamic Grafana dropdowns:
-  - Organization
-  - Service
-  - Node
-- Dashboard panels for:
-  - CPU Usage
-  - Memory Usage
-  - Disk Usage
-  - Network Traffic
-  - System Load
-- Linux installer for node_exporter
-- Optional push-based script to label and push metrics
-- Example configs for multiple AWS organizations
+## Key Features
 
----
+### Multi-Tenant SaaS Foundation
 
-## Folder structure
+- Organizations and organization memberships.
+- JWT authentication with bcrypt password hashing.
+- Role-based access control for `OWNER`, `ADMIN`, `DEVELOPER`, and `VIEWER`.
+- Organization-scoped API keys with hashed storage and one-time raw key return.
+- Tenant isolation tests for protected routes and data access paths.
+- Audit logging for sensitive actions.
+
+### Service Monitoring
+
+- Organization-scoped monitored service registry.
+- HTTP/API/WEB health check definitions.
+- Manual uptime checks with status, response time, status code, and error storage.
+- Service status tracking with consecutive success/failure counters.
+- SSRF-aware URL validation and safe health-check behavior.
+
+### Scheduled Workers
+
+- Redis/BullMQ queue foundation.
+- Scheduled uptime worker and scheduler.
+- Worker diagnostics endpoint.
+- Worker process can run separately from the API process.
+- Docker Compose support for API and worker containers.
+
+### Alerts And Notifications
+
+- Uptime alert rules for service down, degraded, response-time, and consecutive-failure signals.
+- Cooldown and deduplication behavior.
+- Notification channel model for email, Slack, and webhook-style delivery.
+- Alert lifecycle from open to acknowledged/resolved.
+
+### Incident Management
+
+- Incident lifecycle: `OPEN`, `ACKNOWLEDGED`, `INVESTIGATING`, `IDENTIFIED`, `MONITORING`, `RESOLVED`, `CLOSED`.
+- Assignment, comments, timeline events, and postmortem fields.
+- Alert-to-incident integration.
+- RBAC-aware incident actions.
+- Tenant-scoped incident queries.
+
+### Logs And Metrics Ingestion
+
+- API-key-authenticated log ingestion.
+- API-key-authenticated metric ingestion.
+- Request-level ingestion caps and rate limits.
+- Sensitive telemetry attribute redaction.
+- Cursor pagination for log and metric query APIs.
+- Manual retention cleanup command.
+
+### Dashboard And Observability APIs
+
+- Overview API for service, alert, incident, uptime, log, and metric summaries.
+- Service summary API.
+- Metric aggregation API.
+- Log statistics API.
+- VictoriaMetrics health endpoint.
+- VictoriaMetrics query route hardening.
+
+### Security And Production Hardening
+
+- Helmet, CORS configuration, request size limits, and safe error handling.
+- Rate limiting for auth, ingestion, and expensive read/query routes.
+- Redis-backed rate limiter option with memory fallback.
+- Prisma migration verification script.
+- MySQL integration tests.
+- GitHub Actions CI.
+- Backend Dockerfile and Docker Compose wiring.
+- Honest production-readiness checklist.
+
+## Tech Stack
+
+| Area | Technology |
+|---|---|
+| Backend | Node.js, Express 5, ES modules |
+| Database | MySQL, Prisma 5 |
+| Auth | JWT, bcrypt |
+| Validation | Zod |
+| Workers | Redis, BullMQ |
+| Metrics stack | VictoriaMetrics, vmagent, Grafana, node_exporter |
+| Containerization | Docker, Docker Compose |
+| CI/CD | GitHub Actions |
+| Testing | Node test runner, unit tests, MySQL integration tests |
+| Security | Helmet, RBAC, API key hashing, rate limiting, tenant scoping |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Client[API Client or SaaS UI] --> API[Express API]
+  API --> Auth[JWT Auth and RBAC]
+  API --> MySQL[(MySQL via Prisma)]
+  API --> Redis[(Redis)]
+  API --> VM[VictoriaMetrics Query API]
+
+  Ingest[Telemetry Producers] --> ApiKey[Scoped API Keys]
+  ApiKey --> API
+
+  Scheduler[Uptime Scheduler] --> Redis
+  Redis --> Worker[Uptime Worker]
+  Worker --> Targets[Customer Services]
+  Worker --> MySQL
+
+  MySQL --> Alerts[Alert Evaluation]
+  Alerts --> Incidents[Incident Timeline]
+  VM --> Grafana[Grafana Dashboards]
+```
+
+Sidroid separates the control plane from the monitoring data plane:
+
+- Control plane: organizations, users, API keys, services, alerts, incidents, audit logs, and dashboard APIs.
+- Data plane: uptime checks, ingested logs, custom metrics, VictoriaMetrics scrape/query data, and worker execution.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a deeper architecture walkthrough.
+
+## Data Flows
+
+### Uptime Check Flow
+
+```mermaid
+sequenceDiagram
+  participant S as Scheduler
+  participant Q as Redis/BullMQ
+  participant W as Worker
+  participant T as Service URL
+  participant DB as MySQL
+  participant A as Alert Logic
+
+  S->>DB: Find due services
+  S->>Q: Enqueue uptime check
+  W->>Q: Consume job
+  W->>T: Perform safe HTTP check
+  W->>DB: Store uptime result
+  W->>A: Evaluate uptime rules
+  A->>DB: Create/update alert and incident events
+```
+
+### Telemetry Ingestion Flow
+
+```mermaid
+sequenceDiagram
+  participant C as Service/Agent
+  participant API as Express API
+  participant K as API Key Auth
+  participant L as Rate/Quota Limits
+  participant DB as MySQL
+
+  C->>API: POST /api/ingest/logs or /metrics
+  API->>K: Validate hashed scoped API key
+  API->>L: Apply API-key/org rate limits
+  API->>API: Validate, redact, and cap accepted rows
+  API->>DB: Insert log entries or metric samples
+  API-->>C: 207 accepted/rejected summary
+```
+
+### Alert-To-Incident Flow
+
+```mermaid
+flowchart TD
+  Signal[Uptime or metric signal] --> Rule[Alert rule evaluation]
+  Rule -->|condition true| Alert[Open alert]
+  Alert --> Dedupe{Active incident exists?}
+  Dedupe -->|no| Incident[Create incident]
+  Dedupe -->|yes| Timeline[Append timeline event]
+  Incident --> Timeline
+  Timeline --> Resolve[Recover, resolve, close]
+```
+
+## Repository Structure
 
 ```text
 monitoring-system/
-│
-├── docker/
-│   ├── docker-compose.yml
-│   ├── grafana/
-│   │   └── provisioning/
-│   └── victoriametrics/
-│
-├── scripts/
-│   ├── install_node_exporter.sh
-│   ├── send_metrics.sh
-│   └── install_monitoring_stack.sh
-│
-├── dashboards/
-│   └── grafana_dashboard.json
-│
-├── configs/
-│   ├── vmagent_config.yml
-│   └── prometheus_scrape_example.yml
-│
-├── aws/
-│   └── ec2_setup.md
-│
-├── docs/
-│   ├── architecture.md
-│   ├── setup_guide.md
-│   ├── grafana_variables.md
-│   └── troubleshooting.md
-│
-└── README.md
+  backend/                 Express/Prisma SaaS control-plane backend
+  configs/                 vmagent and Prometheus scrape examples
+  dashboards/              Grafana dashboard JSON
+  docker/                  Docker Compose stack and Grafana provisioning
+  docs/                    Architecture, API, demo, security, roadmap docs
+  scripts/                 Linux/node_exporter helper scripts
+  aws/                     EC2 setup notes
 ```
 
----
+## Local Setup Quickstart
 
-## Quick start
+Prerequisites:
 
-### 1. Configure your EC2 targets
-Edit:
+- Node.js 22+
+- Docker Desktop
+- MySQL available through Docker Compose or a local/dev database
+- Redis for worker/scheduler flows
 
-`configs/vmagent_config.yml`
-
-Replace the example target IPs with your real EC2 node_exporter endpoints.
-
-### 2. Start the monitoring stack
-Open a terminal inside the `docker/` folder and run:
+Install backend dependencies:
 
 ```bash
-docker compose up -d
+cd backend
+npm install
+cp .env.example .env
 ```
 
-or:
+Start local infrastructure:
 
 ```bash
-docker-compose up -d
+docker compose -f docker/docker-compose.yml --env-file docker/.env.example up -d mysql redis victoriametrics vmagent grafana
 ```
 
-### 3. Access Grafana
-- URL: `http://localhost:3000`
-- Username: `admin`
-- Password: `admin123`
+If port `3306` is already taken:
 
-### 4. Install node_exporter on each Linux EC2 instance
+```powershell
+$env:MYSQL_HOST_PORT="3308"
+docker compose -f docker/docker-compose.yml --env-file docker/.env.example up -d mysql redis
+```
+
+Apply migrations:
 
 ```bash
-sudo bash scripts/install_node_exporter.sh
+cd backend
+DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npx prisma migrate status
+DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npx prisma migrate deploy
+DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm run db:verify-migrations
 ```
 
-If running from a copied script on the node, just use:
+Seed local demo data:
 
 ```bash
-sudo bash install_node_exporter.sh
+DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm run seed
 ```
 
-### 5. Open the dashboard
-Go to:
+Start the API:
 
-**Sidroid Monitoring → Multi-Organization AWS Node Monitoring**
+```bash
+npm run dev
+```
 
----
+Start the worker in another terminal:
 
-## Example organization model
+```bash
+npm run worker
+```
 
-### Organization 1
-- `organization_id=1001`
-- `organization_name=CompanyA`
-- `service=ec2`
-- nodes:
-  - `ec2-prod-01`
-  - `ec2-prod-02`
+## Docker Compose Setup
 
-### Organization 2
-- `organization_id=2001`
-- `organization_name=CompanyB`
-- `service=ec2`
-- nodes:
-  - `ec2-test-01`
+Render and validate Compose config:
 
----
+```bash
+docker compose -f docker/docker-compose.yml --env-file docker/.env.example config
+```
 
-## Recommended deployment model
+Start the local stack:
 
-Use the **pull model** for production:
+```bash
+docker compose -f docker/docker-compose.yml --env-file docker/.env.example up -d
+```
 
-- install `node_exporter` on every EC2 node,
-- let `vmagent` scrape those nodes,
-- store all metrics in `VictoriaMetrics`,
-- visualize in Grafana.
+The backend image is defined in `backend/Dockerfile`. In this local environment, `docker build -f backend/Dockerfile backend` currently fails during container `npm ci` with `npm error Exit handler never called!`. `npm audit --omit=dev` separately fails with `unable to verify the first certificate`, so the local/container Node/npm CA trust chain should be fixed before claiming Docker build or audit success.
 
-Use the included `send_metrics.sh` only when a push workflow is required.
-
----
-
-## Important notes
-
-- Run the compose command from the `docker/` directory so the relative mounts work.
-- Keep node_exporter private and reachable only from the monitoring server.
-- For hundreds of nodes, keep labels low-cardinality and use private networking.
-
----
-
-## Documentation
-
-- Architecture: `docs/architecture.md`
-- Setup guide: `docs/setup_guide.md`
-- Grafana variables: `docs/grafana_variables.md`
-- Troubleshooting: `docs/troubleshooting.md`
-- AWS EC2 setup: `aws/ec2_setup.md`
-- Phase 0 repository audit: `docs/REPO_AUDIT.md`
-- Phase 1 stabilization notes: `docs/PHASE_1_NOTES.md`
-- Phase 2 auth/RBAC/multitenancy notes: `docs/PHASE_2_NOTES.md`
-- Phase 3 service uptime monitoring notes: `docs/PHASE_3_NOTES.md`
-- Phase 4 scheduled uptime worker notes: `docs/PHASE_4_NOTES.md`
-- Phase 5 alerting notes: `docs/PHASE_5_NOTES.md`
-- Phase 6 incident management notes: `docs/PHASE_6_NOTES.md`
-- Phase 7 telemetry ingestion notes: `docs/PHASE_7_NOTES.md`
-- Phase 8 observability visualization notes: `docs/PHASE_8_NOTES.md`
-- Phase 9 production hardening notes: `docs/PHASE_9_NOTES.md`
-- Production hardening guide: `docs/PRODUCTION_HARDENING.md`
-- Security notes: `docs/SECURITY_NOTES.md`
-- Production roadmap: `docs/PRODUCTION_ROADMAP.md`
-- Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
-
----
-
-## SaaS upgrade status
-
-This repository is being evolved from a monitoring stack plus backend control plane into a multi-tenant observability SaaS. Phase 9 adds production-hardening foundations around the existing backend: rate limiting, ingestion request quotas, MySQL integration tests, backend/worker containers, Compose polish, CI, and deployment documentation. It does not add a frontend, AI features, billing, or a database redesign.
-
----
-
-## Backend validation
+## Testing
 
 From `backend/`:
 
-```powershell
+```bash
 npm run lint
 npm test
-$env:RUN_INTEGRATION_TESTS="true"; $env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npm run test:integration
-$env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npx prisma validate
-$env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npx prisma generate
-$env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npm run db:verify-migrations
 ```
 
-From `docker/`:
+Optional MySQL integration tests:
 
 ```bash
-docker compose --env-file .env.example config
+RUN_INTEGRATION_TESTS=true DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm run test:integration
 ```
 
-Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, and local tool state out of Git. Use `.env.example` files for placeholders only.
+Prisma checks:
 
----
+```bash
+DATABASE_URL=mysql://placeholder:placeholder@127.0.0.1:3306/placeholder npx prisma validate
+DATABASE_URL=mysql://placeholder:placeholder@127.0.0.1:3306/placeholder npx prisma generate
+```
 
-## Completed backend phases
+Audit attempt:
 
-| Phase | What was built |
+```bash
+npm audit --omit=dev
+```
+
+Audit currently fails in this local environment with `unable to verify the first certificate`. A clean audit should not be claimed until that command succeeds.
+
+## API Overview
+
+| Area | Routes |
 |---|---|
-| Phase 0 | Repo audit and production roadmap |
-| Phase 1 | Foundation stabilization, test hygiene, secrets audit |
-| Phase 2 | Auth hardening, RBAC, org membership, API keys, audit logs |
-| Phase 3 | Monitored services, uptime checks, SSRF protection |
-| Phase 4 | Redis/BullMQ queue, scheduled uptime worker, Docker Compose |
-| Phase 5 | Uptime alert rules, cooldown/dedup, notification dispatch |
-| Phase 6 | **Incident management**: incident model, lifecycle, timeline, alert-to-incident integration |
-| Phase 7 | **Telemetry ingestion**: logs/metrics ingest via API keys, JWT query APIs, retention cleanup |
-| Phase 8 | **Observability visualization APIs**: overview, service summaries, metric aggregation, log stats, retention/VM health |
-| Phase 9 | **Production hardening foundation**: rate limiting, telemetry request quotas, MySQL integration tests, backend/worker Docker support, CI |
+| Health | `GET /health`, `GET /health/ready` |
+| Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` |
+| Organizations | `GET /api/org`, `GET /api/org/:id` |
+| API keys | `GET /api/api-keys`, `POST /api/api-keys`, revoke/delete routes |
+| Services | `GET/POST /api/services`, `GET/PATCH/DELETE /api/services/:id`, `POST /api/services/:id/check` |
+| Uptime alert rules | `GET/POST /api/uptime-alert-rules` |
+| Alerts | `GET /api/alerts`, `PATCH /api/alerts/:id` |
+| Incidents | `GET/POST /api/incidents`, action routes, timeline route |
+| Ingestion | `POST /api/ingest/logs`, `POST /api/ingest/metrics` |
+| Logs | `GET /api/logs`, `GET /api/logs/stats`, `GET /api/logs/:id` |
+| Metrics | `GET /api/metrics`, `GET /api/metrics/names`, `GET /api/metrics/aggregate` |
+| Observability | `GET /api/observability/overview`, service summary, retention status, VM health |
+| VictoriaMetrics proxy | `GET/POST /api/query/instant`, `GET/POST /api/query/range`, `GET /api/query/labels` |
 
----
+See [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md) for copy-paste curl examples.
 
-## Phase 6: Incident Management
+## Example API Calls
 
-Phase 6 adds production-style incident management on top of the alerting system.
+Register:
 
-**Features:**
-- Incident model with 7-status lifecycle: OPEN → ACKNOWLEDGED → INVESTIGATING → IDENTIFIED → MONITORING → RESOLVED → CLOSED
-- Incident timeline events (CREATED, ACKNOWLEDGED, STATUS_CHANGED, ASSIGNED, COMMENTED, RESOLVED, CLOSED, ALERT_LINKED, ALERT_RECOVERED)
-- Alert-to-incident integration: triggered alerts automatically create incidents; resolved alerts add ALERT_RECOVERED events and move incidents to MONITORING
-- Postmortem fields: impactSummary, rootCause, resolutionSummary, preventionNotes
-- RBAC: VIEWER read-only, DEVELOPER create/ack/assign-self/comment/resolve, ADMIN/OWNER close + assign anyone
-- Full tenant isolation and audit logging
-
-**API routes:**
-```
-POST   /api/incidents
-GET    /api/incidents
-GET    /api/incidents/:id
-PATCH  /api/incidents/:id
-POST   /api/incidents/:id/acknowledge
-POST   /api/incidents/:id/assign
-POST   /api/incidents/:id/resolve
-POST   /api/incidents/:id/close
-POST   /api/incidents/:id/comments
-GET    /api/incidents/:id/timeline
+```bash
+curl -X POST http://localhost:5000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Siddhant","email":"siddhant@example.com","password":"DemoPass123!","organizationName":"Acme Observability"}'
 ```
 
-See `docs/PHASE_6_NOTES.md` for full design documentation.
+Create a monitored service:
 
----
-
-## Phase 7: Telemetry Ingestion
-
-Phase 7 adds a MySQL-backed ingestion foundation for service logs and custom metric samples.
-
-**Features:**
-- API-key-authenticated ingestion endpoints for logs and metrics.
-- Required ingestion scopes: `logs:write` and `metrics:write`.
-- JWT-protected query APIs for logs, log detail, metric samples, and metric names.
-- Tenant isolation from API key organization scope for ingest and JWT organization scope for reads.
-- Sensitive telemetry attribute/tag redaction before storage.
-- Manual retention cleanup script: `npm run telemetry:cleanup`.
-
-**API routes:**
-```
-POST /api/ingest/logs
-POST /api/ingest/metrics
-GET  /api/logs
-GET  /api/logs/:id
-GET  /api/metrics
-GET  /api/metrics/names
+```bash
+curl -X POST http://localhost:5000/api/services \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Checkout API","type":"API","environment":"production","url":"https://example.com/health","healthPath":"/health","intervalSeconds":60}'
 ```
 
-See `docs/PHASE_7_NOTES.md` for migration notes, environment variables, pagination behavior, and known production gaps.
+Ingest logs:
 
----
-
-## Phase 8: Observability Visualization APIs
-
-Phase 8 adds dashboard-ready read APIs for a future SaaS UI.
-
-**API routes:**
-```
-GET /api/observability/overview
-GET /api/observability/services/:serviceId/summary
-GET /api/observability/retention/status
-GET /api/observability/victoriametrics/health
-GET /api/metrics/aggregate
-GET /api/logs/stats
+```bash
+curl -X POST http://localhost:5000/api/ingest/logs \
+  -H "X-Api-Key: <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"logs":[{"level":"ERROR","message":"checkout dependency timeout","serviceId":"<SERVICE_ID>"}]}'
 ```
 
-**Highlights:**
-- JWT + VIEWER access for dashboard reads.
-- tenant scope from the authenticated user's active organization.
-- 30-day maximum query range.
-- 500-bucket maximum for time-series responses.
-- service filters validated against the active organization.
-- parameterized MySQL bucketing for metric aggregates and log statistics.
-- VictoriaMetrics query proxy now has stronger route-level RBAC and range validation.
+Get dashboard overview:
 
-See `docs/PHASE_8_NOTES.md` for dashboard data flow, endpoint contracts, limits, and known limitations.
+```bash
+curl http://localhost:5000/api/observability/overview \
+  -H "Authorization: Bearer <JWT_TOKEN>"
+```
 
----
+## Demo Workflow
 
-## Phase 9: Production Hardening Foundation
+1. Start MySQL and Redis with Docker Compose.
+2. Run Prisma migrations.
+3. Run `npm run seed` to create local demo data.
+4. Start the API with `npm run dev`.
+5. Log in as a seeded demo user.
+6. Create a disposable API key with `logs:write` and `metrics:write`.
+7. Register or inspect monitored services.
+8. Trigger a manual uptime check.
+9. Ingest demo logs and metrics.
+10. Query overview, service summary, log stats, metric aggregation, alerts, and incidents.
 
-Phase 9 makes the backend easier to validate, containerize, and run safely.
+Full walkthrough: [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md).
 
-**Highlights:**
-- Rate limits for auth, telemetry ingestion, observability, logs, metrics, and VictoriaMetrics query routes.
-- API-key/org-aware ingestion limiting with safe 429 responses.
-- Accepted-row caps for logs and metrics ingestion requests.
-- Optional Docker MySQL integration tests and migration verification script.
-- Backend Dockerfile and shared worker container support.
-- Compose backend/worker services with configurable MySQL/backend host ports.
-- GitHub Actions CI for lint, unit tests, Prisma, Compose config, Docker build, and MySQL integration tests.
+## Production-Readiness Checklist
 
-See `docs/PHASE_9_NOTES.md`, `docs/PRODUCTION_HARDENING.md`, and `docker/README.md`.
+Passed or implemented as a production-grade foundation:
 
----
+- Tenant isolation and RBAC.
+- JWT auth and hashed API keys.
+- Scheduled workers with Redis/BullMQ.
+- Uptime checks, alerts, incidents, telemetry ingestion.
+- Rate limiting and request-level telemetry caps.
+- Prisma migration chain verification.
+- MySQL integration tests.
+- CI workflow.
+- Docker/Compose foundation.
 
-## Next production upgrades
+Needs work before real production:
 
-- recruiter-ready README polish and demo narrative
-- demo seed data
-- architecture diagrams and screenshots
-- final deployment walkthrough
-- per-org daily telemetry quotas and plan limits
-- production secret manager integration
-- database backup/restore runbooks
-- reverse proxy and TLS termination
-- VictoriaMetrics remote-write for custom metrics
-- Retention enforcement worker
-- add `vmalert` for infrastructure alerting
-- add Grafana SSO
-- add EC2 auto-discovery
-- store configs in Git and manage with IaC
+- `npm audit --omit=dev` must pass.
+- Docker image build must pass without local TLS workaround.
+- Managed secrets and environment-specific config.
+- TLS/reverse proxy.
+- Database backups and restore runbooks.
+- App self-monitoring and log shipping.
+- Persistent per-org quotas/billing.
+- Full frontend and session handling.
+- Cloud deployment/IaC.
+
+Detailed checklist: [docs/PRODUCTION_READINESS_CHECKLIST.md](docs/PRODUCTION_READINESS_CHECKLIST.md).
+
+## Known Limitations
+
+- No frontend application yet.
+- No AI incident summaries yet.
+- No billing or plan enforcement.
+- Logs and custom metrics are MySQL-backed; VictoriaMetrics forwarding for custom metrics is future work.
+- Docker build fails locally during container `npm ci`, while npm audit fails locally with certificate verification.
+- Docker Compose is a local/demo deployment model, not a complete production orchestrator.
+- Existing `backend/prisma/seed.js` is left untouched; use `npm run seed` for the Phase 10 demo seed.
+
+## Roadmap
+
+- Final code quality and README accuracy review.
+- Resume/LinkedIn packaging.
+- Fix local/container CA trust and complete Docker build + audit.
+- Add demo screenshots or short walkthrough video.
+- Add frontend dashboard.
+- Add scheduled telemetry retention worker.
+- Add persistent usage quotas and billing model.
+- Add production reverse proxy/TLS and managed secret integration.
+- Add cloud deployment/IaC.
+- Add AI incident summaries after the core product is stable.
+
+## Resume Bullets
+
+- Built a production-style multi-tenant observability SaaS backend with Node.js, Express, Prisma, MySQL, Redis/BullMQ, and Docker Compose.
+- Implemented tenant-scoped authentication, RBAC, hashed API keys, audit logging, service monitoring, alerts, incidents, and telemetry ingestion.
+- Designed uptime worker architecture using Redis/BullMQ with scheduled checks, alert deduplication, cooldowns, and incident timeline integration.
+- Added dashboard-ready observability APIs for overview data, service summaries, log statistics, metric aggregation, and VictoriaMetrics health.
+- Hardened the backend with rate limiting, integration tests, migration verification, CI, Docker support, and production-readiness documentation.
+
+More resume assets: [docs/RESUME_BULLETS.md](docs/RESUME_BULLETS.md).
+
+## Interview Explanation
+
+Sidroid is best described as a production-grade foundation for an observability SaaS. The important engineering story is not just the endpoints, but the architecture: tenant isolation, scoped API keys, background workers, telemetry ingestion limits, alert-to-incident workflows, migration verification, CI, and honest deployment constraints. It demonstrates how to evolve a monitoring stack into a SaaS control plane in safe phases.
+
+Interview notes: [docs/INTERVIEW_NOTES.md](docs/INTERVIEW_NOTES.md).
+
+## Screenshots And Demo Media
+
+No frontend screenshots are included yet. Suggested screenshots and demo flow are documented in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [API examples](docs/API_EXAMPLES.md)
+- [Demo guide](docs/DEMO_GUIDE.md)
+- [Project summary](docs/PROJECT_SUMMARY.md)
+- [Interview notes](docs/INTERVIEW_NOTES.md)
+- [Resume bullets](docs/RESUME_BULLETS.md)
+- [Screenshots guide](docs/SCREENSHOTS.md)
+- [Production readiness checklist](docs/PRODUCTION_READINESS_CHECKLIST.md)
+- [Production hardening](docs/PRODUCTION_HARDENING.md)
+- [Production roadmap](docs/PRODUCTION_ROADMAP.md)
+- [Target architecture](docs/TARGET_ARCHITECTURE.md)
+
+## License
+
+No license file is currently present. Add a license before promoting the project for reuse outside a portfolio/recruiter context.

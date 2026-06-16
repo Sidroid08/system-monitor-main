@@ -70,6 +70,16 @@ DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm 
 
 Use the configured host port in `DATABASE_URL` when `MYSQL_HOST_PORT` is not `3306`.
 
+## Seed Demo Data
+
+After migrations, seed the recruiter/demo dataset from `backend/`:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm run seed
+```
+
+The demo seed uses `.local` users and placeholder service URLs only. It does not print a raw API key.
+
 ## Validate Compose
 
 From the repository root:
