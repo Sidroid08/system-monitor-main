@@ -242,7 +242,9 @@ Migration file:
 
 - `backend/prisma/migrations/20260616050000_phase7_telemetry_ingestion/migration.sql`
 
-Migration is additive - no existing columns modified. Safe to apply to a Phase 6 database after the Phase 6 incident migration exists:
+Migration is additive - no existing columns modified. Safe to apply after the Phase 6 incident migration:
+
+- `backend/prisma/migrations/20260616045000_phase6_incident_management/migration.sql`
 
 ```bash
 cd backend
@@ -254,7 +256,7 @@ Dev migration status check:
 DATABASE_URL="mysql://..." npx prisma migrate status
 ```
 
-Repair-pass finding: Phase 6 incident models (`Incident`, `IncidentEvent`, incident enums) are present in `schema.prisma`, but no matching Phase 6 incident migration directory was found under `backend/prisma/migrations`. Treat that as a separate pre-production deployment blocker.
+Migration-chain repair added the missing Phase 6 incident migration in `20260616045000_phase6_incident_management`, which sorts before this Phase 7 telemetry migration.
 
 ---
 

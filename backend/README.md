@@ -291,7 +291,15 @@ DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx 
 
 Phase 7 adds `log_entries` and `metric_samples` through `backend/prisma/migrations/20260616050000_phase7_telemetry_ingestion/migration.sql`.
 
-Pre-production blocker: this branch contains Phase 6 incident models in `schema.prisma`, but no matching Phase 6 incident migration directory was found under `backend/prisma/migrations`.
+Phase 6 adds `incidents` and `incident_events` through `backend/prisma/migrations/20260616045000_phase6_incident_management/migration.sql`.
+
+Before deployment, verify the chain against a real local/dev MySQL database:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma migrate status
+```
+
+See `docs/MIGRATION_CHAIN_REPAIR.md` for the Phase 6/Phase 7 migration-chain repair notes and current verification limits.
 
 ## Incident management (Phase 6)
 
