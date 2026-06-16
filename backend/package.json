@@ -8,12 +8,15 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "lint": "node --check src/server.js",
-    "test": "node --test test/authenticate.test.js test/protected-routes.test.js test/schemas.test.js test/evaluator.test.js test/tenant-scope.test.js test/rbac.test.js test/api-keys.test.js test/services.test.js test/uptime-queue.test.js test/alerts.test.js test/uptime-alerts.test.js test/uptime-alert-rules.test.js test/incidents.test.js test/telemetry-ingest.test.js test/telemetry-query.test.js test/observability-visualization.test.js",
+    "test": "npm run test:unit",
+    "test:unit": "node --test test/authenticate.test.js test/protected-routes.test.js test/schemas.test.js test/evaluator.test.js test/tenant-scope.test.js test/rbac.test.js test/api-keys.test.js test/services.test.js test/uptime-queue.test.js test/alerts.test.js test/uptime-alerts.test.js test/uptime-alert-rules.test.js test/incidents.test.js test/telemetry-ingest.test.js test/telemetry-query.test.js test/observability-visualization.test.js test/rate-limit.test.js",
+    "test:integration": "node --test --test-concurrency=1 test/integration/01-migrations.test.js test/integration/02-telemetry-prisma.test.js test/integration/03-observability-prisma.test.js",
     "worker": "node src/queues/uptime.worker.js --with-scheduler",
     "worker:uptime": "node src/queues/uptime.worker.js",
     "scheduler:uptime": "node src/queues/uptime.scheduler.js",
     "sync": "node scripts/manualSync.js",
     "db:check": "node scripts/checkPrisma.js",
+    "db:verify-migrations": "node scripts/verifyMigrations.js",
     "telemetry:cleanup": "node src/queues/telemetry.retention.js"
   },
   "dependencies": {

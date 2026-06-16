@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - "feature/**"
+
+jobs:
+  backend:
+    name: Backend unit, Prisma, Docker
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: mysql://placeholder:placeholder@127.0.0.1:3306/placeholder
+      JWT_SECRET: test-secret-at-least-32-chars-long!!
+      API_KEY_PEPPER: test-api-key-pepper-at-least-32-chars
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: backend
+        run: npm test
+
+      - name: Prisma validate
+        working-directory: backend
+        run: npx prisma validate
+
+      - name: Prisma generate
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Docker Compose config
+        run: docker compose -f docker/docker-compose.yml --env-file docker/.env.example config
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile backend
+
+  integration:
+    name: MySQL integration tests
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-local-password
+          MYSQL_DATABASE: sidroid_ci
+          MYSQL_USER: sidroid_user
+          MYSQL_PASSWORD: local-dev-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -usidroid_user -plocal-dev-password --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid_ci
+      RUN_INTEGRATION_TESTS: "true"
+      JWT_SECRET: test-secret-at-least-32-chars-long!!
+      API_KEY_PEPPER: test-api-key-pepper-at-least-32-chars
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Prisma generate
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Run MySQL integration tests
+        working-directory: backend
+        run: npm run test:integration

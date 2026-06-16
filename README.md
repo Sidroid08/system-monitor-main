@@ -174,6 +174,8 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - Phase 6 incident management notes: `docs/PHASE_6_NOTES.md`
 - Phase 7 telemetry ingestion notes: `docs/PHASE_7_NOTES.md`
 - Phase 8 observability visualization notes: `docs/PHASE_8_NOTES.md`
+- Phase 9 production hardening notes: `docs/PHASE_9_NOTES.md`
+- Production hardening guide: `docs/PRODUCTION_HARDENING.md`
 - Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
@@ -182,7 +184,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 8 adds dashboard-friendly observability APIs over existing uptime, alert, incident, log, and metric data. It does not add a frontend yet and does not redesign telemetry storage.
+This repository is being evolved from a monitoring stack plus backend control plane into a multi-tenant observability SaaS. Phase 9 adds production-hardening foundations around the existing backend: rate limiting, ingestion request quotas, MySQL integration tests, backend/worker containers, Compose polish, CI, and deployment documentation. It does not add a frontend, AI features, billing, or a database redesign.
 
 ---
 
@@ -190,10 +192,13 @@ This repository is being evolved from a monitoring stack plus early backend cont
 
 From `backend/`:
 
-```bash
+```powershell
 npm run lint
 npm test
+$env:RUN_INTEGRATION_TESTS="true"; $env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npm run test:integration
 $env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npx prisma validate
+$env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npx prisma generate
+$env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npm run db:verify-migrations
 ```
 
 From `docker/`:
@@ -219,6 +224,7 @@ Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, 
 | Phase 6 | **Incident management**: incident model, lifecycle, timeline, alert-to-incident integration |
 | Phase 7 | **Telemetry ingestion**: logs/metrics ingest via API keys, JWT query APIs, retention cleanup |
 | Phase 8 | **Observability visualization APIs**: overview, service summaries, metric aggregation, log stats, retention/VM health |
+| Phase 9 | **Production hardening foundation**: rate limiting, telemetry request quotas, MySQL integration tests, backend/worker Docker support, CI |
 
 ---
 
@@ -305,16 +311,36 @@ See `docs/PHASE_8_NOTES.md` for dashboard data flow, endpoint contracts, limits,
 
 ---
 
+## Phase 9: Production Hardening Foundation
+
+Phase 9 makes the backend easier to validate, containerize, and run safely.
+
+**Highlights:**
+- Rate limits for auth, telemetry ingestion, observability, logs, metrics, and VictoriaMetrics query routes.
+- API-key/org-aware ingestion limiting with safe 429 responses.
+- Accepted-row caps for logs and metrics ingestion requests.
+- Optional Docker MySQL integration tests and migration verification script.
+- Backend Dockerfile and shared worker container support.
+- Compose backend/worker services with configurable MySQL/backend host ports.
+- GitHub Actions CI for lint, unit tests, Prisma, Compose config, Docker build, and MySQL integration tests.
+
+See `docs/PHASE_9_NOTES.md`, `docs/PRODUCTION_HARDENING.md`, and `docker/README.md`.
+
+---
+
 ## Next production upgrades
 
-- API rate limiting and per-org telemetry quotas
-- Dockerized backend and worker processes
-- CI/CD for lint, tests, Prisma, and Docker config validation
-- MySQL integration tests for dashboard aggregation SQL
+- recruiter-ready README polish and demo narrative
+- demo seed data
+- architecture diagrams and screenshots
+- final deployment walkthrough
+- per-org daily telemetry quotas and plan limits
+- production secret manager integration
+- database backup/restore runbooks
+- reverse proxy and TLS termination
 - VictoriaMetrics remote-write for custom metrics
 - Retention enforcement worker
 - add `vmalert` for infrastructure alerting
-- add TLS/reverse proxy
 - add Grafana SSO
 - add EC2 auto-discovery
 - store configs in Git and manage with IaC

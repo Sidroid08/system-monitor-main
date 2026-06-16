@@ -16,6 +16,7 @@ Express/Prisma control-plane backend for the Sidroid monitoring project.
 - API-key-authenticated logs and metrics ingestion
 - JWT-protected telemetry query APIs
 - JWT-protected observability visualization APIs
+- API rate limiting for auth, ingestion, and expensive read/query routes
 - Zod request validation
 - VictoriaMetrics query proxy
 
@@ -62,7 +63,13 @@ npm run lint
 npm test
 ```
 
-`npm test` runs only real test files under `test/`. The Prisma connectivity probe is available separately:
+`npm test` runs the fast unit test suite. Optional Docker/MySQL integration tests are gated:
+
+```bash
+RUN_INTEGRATION_TESTS=true DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npm run test:integration
+```
+
+The Prisma connectivity probe is available separately:
 
 ```bash
 npm run db:check
@@ -164,6 +171,32 @@ Telemetry ingestion requires scoped API keys:
 - `POST /api/ingest/metrics`: `metrics:write`
 
 The API key organization is the tenant source of truth for ingestion. Clients must not send `organizationId`.
+
+## Rate limiting and telemetry limits
+
+Phase 9 adds configurable rate limits:
+
+```text
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_STORE=memory
+AUTH_RATE_LIMIT_WINDOW_SECONDS=60
+AUTH_RATE_LIMIT_MAX=10
+INGEST_RATE_LIMIT_WINDOW_SECONDS=60
+INGEST_RATE_LIMIT_MAX=120
+QUERY_RATE_LIMIT_WINDOW_SECONDS=60
+QUERY_RATE_LIMIT_MAX=300
+```
+
+Use `RATE_LIMIT_STORE=redis` when running multiple API replicas. Local/unit tests can disable rate limiting with `RATE_LIMIT_ENABLED=false`.
+
+Telemetry request caps:
+
+```text
+TELEMETRY_MAX_ACCEPTED_LOGS_PER_REQUEST=100
+TELEMETRY_MAX_ACCEPTED_METRICS_PER_REQUEST=100
+```
+
+Extra valid rows over the accepted-row cap are rejected inside the multi-status ingestion response. Full SaaS plan quotas are intentionally deferred.
 
 ## Service monitoring
 
@@ -274,11 +307,10 @@ npm run telemetry:cleanup
 
 Known limitations:
 
-- No ingestion rate limiting yet.
 - No VictoriaMetrics forwarding yet.
-- No integration tests with real MySQL yet.
 - Retention cleanup is manual/global, not per-org or scheduled.
 - Log search uses simple MySQL `LIKE`; it is not full-text indexed yet.
+- No long-term plan/billing quota model yet.
 
 ## Observability visualization APIs (Phase 8)
 
@@ -334,6 +366,12 @@ Apply pending migrations in a deployed environment with:
 DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma migrate deploy
 ```
 
+Verify required production tables:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npm run db:verify-migrations
+```
+
 Phase 7 adds `log_entries` and `metric_samples` through `backend/prisma/migrations/20260616050000_phase7_telemetry_ingestion/migration.sql`.
 
 Phase 6 adds `incidents` and `incident_events` through `backend/prisma/migrations/20260616045000_phase6_incident_management/migration.sql`.
@@ -345,6 +383,20 @@ DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx 
 ```
 
 See `docs/MIGRATION_CHAIN_REPAIR.md` for the Phase 6/Phase 7 migration-chain repair notes and current verification limits.
+
+## Docker and CI
+
+Build the backend image from the repository root:
+
+```bash
+docker build -f backend/Dockerfile backend
+```
+
+`docker/docker-compose.yml` can run the backend API and worker alongside MySQL, Redis, VictoriaMetrics, vmagent, and Grafana. The worker uses the same image with `npm run worker`.
+
+GitHub Actions in `.github/workflows/ci.yml` runs lint, unit tests, Prisma validation/generation, Compose config validation, Docker build, and MySQL integration tests.
+
+See `../docs/PRODUCTION_HARDENING.md` and `../docker/README.md`.
 
 ## Incident management (Phase 6)
 

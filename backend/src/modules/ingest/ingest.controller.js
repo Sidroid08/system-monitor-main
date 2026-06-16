@@ -5,6 +5,7 @@ import {
   parseTimestamp,
   truncateStr,
 } from '../../lib/telemetry.js';
+import { env } from '../../config/env.js';
 import { logBatchSchema, metricBatchSchema } from './ingest.schemas.js';
 import * as defaultRepo from './ingest.repository.js';
 
@@ -27,6 +28,11 @@ export function makeIngestController(deps = {}) {
     for (let i = 0; i < rawItems.length; i++) {
       const item = rawItems[i];
       const serviceId = item.serviceId ?? null;
+
+      if (accepted.length >= env.telemetry.maxAcceptedLogsPerRequest) {
+        rejected.push({ index: i, reason: 'log request quota exceeded' });
+        continue;
+      }
 
       if (serviceId) {
         const ok = await repo.serviceExistsInOrg(serviceId, organizationId);
@@ -78,6 +84,11 @@ export function makeIngestController(deps = {}) {
 
     for (let i = 0; i < rawItems.length; i++) {
       const item = rawItems[i];
+
+      if (accepted.length >= env.telemetry.maxAcceptedMetricsPerRequest) {
+        rejected.push({ index: i, reason: 'metric request quota exceeded' });
+        continue;
+      }
 
       if (!isValidMetricName(item.name)) {
         rejected.push({ index: i, reason: 'Invalid metric name' });

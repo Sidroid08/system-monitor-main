@@ -5,7 +5,7 @@ services:
     container_name: sidroid-mysql
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "${MYSQL_HOST_PORT:-3306}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-local-password}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-sidroid}
@@ -33,6 +33,73 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: sidroid-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_started
+    ports:
+      - "${BACKEND_HOST_PORT:-5000}:5000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 5000
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-development-secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:-replace-with-a-long-random-api-key-pepper}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      DATABASE_URL: mysql://${MYSQL_USER:-sidroid_user}:${MYSQL_PASSWORD:-local-dev-password}@mysql:3306/${MYSQL_DATABASE:-sidroid}
+      REDIS_URL: redis://redis:6379
+      VICTORIA_METRICS_URL: http://victoriametrics:8428
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_STORE: ${RATE_LIMIT_STORE:-redis}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      INGEST_RATE_LIMIT_WINDOW_SECONDS: ${INGEST_RATE_LIMIT_WINDOW_SECONDS:-60}
+      INGEST_RATE_LIMIT_MAX: ${INGEST_RATE_LIMIT_MAX:-120}
+      QUERY_RATE_LIMIT_WINDOW_SECONDS: ${QUERY_RATE_LIMIT_WINDOW_SECONDS:-60}
+      QUERY_RATE_LIMIT_MAX: ${QUERY_RATE_LIMIT_MAX:-300}
+      TELEMETRY_MAX_ACCEPTED_LOGS_PER_REQUEST: ${TELEMETRY_MAX_ACCEPTED_LOGS_PER_REQUEST:-100}
+      TELEMETRY_MAX_ACCEPTED_METRICS_PER_REQUEST: ${TELEMETRY_MAX_ACCEPTED_METRICS_PER_REQUEST:-100}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+      METRIC_RETENTION_DAYS: ${METRIC_RETENTION_DAYS:-30}
+      TELEMETRY_RETENTION_BATCH_SIZE: ${TELEMETRY_RETENTION_BATCH_SIZE:-1000}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: sidroid-worker
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["npm", "run", "worker"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-development-secret}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:-replace-with-a-long-random-api-key-pepper}
+      DATABASE_URL: mysql://${MYSQL_USER:-sidroid_user}:${MYSQL_PASSWORD:-local-dev-password}@mysql:3306/${MYSQL_DATABASE:-sidroid}
+      REDIS_URL: redis://redis:6379
+      VICTORIA_METRICS_URL: http://victoriametrics:8428
+      UPTIME_SCHEDULER_INTERVAL_SECONDS: ${UPTIME_SCHEDULER_INTERVAL_SECONDS:-15}
+      UPTIME_SCHEDULER_SCAN_LIMIT: ${UPTIME_SCHEDULER_SCAN_LIMIT:-100}
+      UPTIME_WORKER_CONCURRENCY: ${UPTIME_WORKER_CONCURRENCY:-5}
 
   victoriametrics:
     image: victoriametrics/victoria-metrics:v1.121.0

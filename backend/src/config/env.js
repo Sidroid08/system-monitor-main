@@ -12,6 +12,19 @@ function required(name, fallback = undefined) {
   return value;
 }
 
+function boolEnv(name, fallback = false) {
+  const value = process.env[name];
+  if (value === undefined || value === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function numberEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 const nodeEnv = process.env.NODE_ENV ?? 'development';
 const isProduction = nodeEnv === 'production';
 
@@ -65,6 +78,23 @@ export const env = {
     url: process.env.REDIS_URL ?? '',
   },
 
+  rateLimit: {
+    enabled: boolEnv('RATE_LIMIT_ENABLED', nodeEnv !== 'test'),
+    store: process.env.RATE_LIMIT_STORE ?? 'memory',
+    auth: {
+      windowSeconds: numberEnv('AUTH_RATE_LIMIT_WINDOW_SECONDS', 60),
+      max: numberEnv('AUTH_RATE_LIMIT_MAX', 10),
+    },
+    ingest: {
+      windowSeconds: numberEnv('INGEST_RATE_LIMIT_WINDOW_SECONDS', 60),
+      max: numberEnv('INGEST_RATE_LIMIT_MAX', 120),
+    },
+    query: {
+      windowSeconds: numberEnv('QUERY_RATE_LIMIT_WINDOW_SECONDS', 60),
+      max: numberEnv('QUERY_RATE_LIMIT_MAX', 300),
+    },
+  },
+
   uptime: {
     schedulerIntervalSeconds: Number(process.env.UPTIME_SCHEDULER_INTERVAL_SECONDS ?? 15),
     schedulerScanLimit: Number(process.env.UPTIME_SCHEDULER_SCAN_LIMIT ?? 100),
@@ -79,6 +109,8 @@ export const env = {
     logRetentionDays: Number(process.env.LOG_RETENTION_DAYS ?? 30),
     metricRetentionDays: Number(process.env.METRIC_RETENTION_DAYS ?? 30),
     retentionBatchSize: Number(process.env.TELEMETRY_RETENTION_BATCH_SIZE ?? 1000),
+    maxAcceptedLogsPerRequest: numberEnv('TELEMETRY_MAX_ACCEPTED_LOGS_PER_REQUEST', 100),
+    maxAcceptedMetricsPerRequest: numberEnv('TELEMETRY_MAX_ACCEPTED_METRICS_PER_REQUEST', 100),
   },
 
   // SMTP for email notifications (optional — notifications fall back to Slack/webhook if absent).

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/authenticate.js';
 import { requireRole, ROLES } from '../../middleware/authorization.js';
+import { queryRateLimiter } from '../../middleware/rateLimit.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
   overview,
@@ -13,6 +14,7 @@ const router = Router();
 
 router.use(authenticate);
 router.use(requireRole(ROLES.VIEWER));
+router.use(queryRateLimiter);
 
 router.get('/overview', asyncHandler(overview));
 router.get('/services/:serviceId/summary', asyncHandler(serviceSummary));
