@@ -1,0 +1,42 @@
+# AWS credential exports — never commit these
+*.csv
+*accessKeys*
+*credentials*
+*.pem
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build / dist
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Local AI/tool state
+.claude/
+.codex/
+.agents/
+
+# Logs and coverage
+*.log
+coverage/
+.nyc_output/
+
+# Prisma shadow DB
+prisma/.env
+
+# file_sd targets (generated at runtime)
+configs/targets/
