@@ -247,7 +247,7 @@ Commands run in Phase 9:
 | `npx prisma validate` | Pass | Schema validated with a placeholder `DATABASE_URL`. |
 | `npx prisma generate` | Pass | Prisma client generated successfully when run after tests completed. |
 | `docker compose -f docker/docker-compose.yml --env-file docker/.env.example config` | Pass | Compose config rendered successfully. |
-| `docker build -f backend/Dockerfile backend` | Fail in this local environment | Container npm install failed because registry TLS verification failed with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`; npm surfaced it as `Exit handler never called!`. This appears environment/certificate related, not an application Dockerfile syntax error. |
+| `docker build -f backend/Dockerfile backend` | Fail in this local environment | Container `npm ci` failed with `Exit handler never called!`. Current `npm audit` output still confirms a local Node/npm certificate trust issue, so the build should not be claimed as passing until local/container CA trust is fixed and the image builds cleanly. |
 | `npm audit --omit=dev` | Fail in this local environment | Audit request failed with `unable to verify the first certificate`; no clean audit can be claimed. |
 
 During local remediation, Prisma engines were refreshed once with a process-local TLS bypass because this machine could not verify `binaries.prisma.sh`. The required Prisma commands were rerun normally afterward from the restored local cache.
@@ -260,11 +260,11 @@ During local remediation, Prisma engines were refreshed once with a process-loca
 - No per-plan quota model exists yet.
 - Docker Compose is still local/development oriented and not a full production orchestrator.
 - No reverse proxy/TLS container is included.
-- `npm audit` and local Docker image builds can fail in this environment because Node/npm cannot verify the local registry certificate chain.
+- `npm audit` fails in this environment because Node/npm cannot verify the local registry certificate chain; Docker image builds also fail locally during container `npm ci`.
 
-## Phase 10 Recommendation
+## Phase 10 Follow-Up
 
-Phase 10 should focus on recruiter/demo readiness:
+Phase 10 focused on recruiter/demo readiness:
 
 - final README polish
 - demo seed data
@@ -273,4 +273,4 @@ Phase 10 should focus on recruiter/demo readiness:
 - final deployment walkthrough
 - concise recruiter-facing project narrative
 
-Phase 10 should keep the Docker `npm ci` failure and `npm audit` certificate limitation visible until the local/container CA trust chain is fixed.
+Phase 10 kept the Docker `npm ci` failure and `npm audit` certificate limitation visible. Phase 11 should continue that honest positioning until the local/container CA trust chain is fixed.

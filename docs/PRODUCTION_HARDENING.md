@@ -127,7 +127,7 @@ They are intended for disposable MySQL databases only. They verify migration dep
 
 ## Demo Seed
 
-Phase 10 adds a local demo seed command:
+The recruiter/demo flow uses a local demo seed command:
 
 ```bash
 DATABASE_URL=mysql://sidroid_user:local-dev-password@127.0.0.1:3306/sidroid npm run seed

@@ -79,7 +79,7 @@ npm run db:check
 
 ## Demo seed
 
-Phase 10 adds a safe local demo seed script:
+The recruiter/demo flow uses a safe local seed script:
 
 ```bash
 DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npm run seed

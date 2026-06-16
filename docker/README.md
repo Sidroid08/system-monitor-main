@@ -96,7 +96,7 @@ From the repository root:
 docker build -f backend/Dockerfile backend
 ```
 
-If the build fails during `npm ci` with `Exit handler never called!`, inspect the npm debug log. In this local environment the underlying cause was registry TLS verification failure (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). Fix the local/container CA trust chain rather than disabling TLS verification in the Dockerfile.
+If the build fails during `npm ci` with `Exit handler never called!`, inspect the npm debug log before claiming an application-level Dockerfile bug. In this local environment, `npm audit --omit=dev` also fails with `unable to verify the first certificate`, so fix the local/container Node/npm CA trust chain rather than disabling TLS verification in the Dockerfile.
 
 ## Production Notes
 

@@ -132,7 +132,7 @@ sequenceDiagram
   participant Limit as Rate/Quota Layer
   participant DB as MySQL
 
-  Client->>API: POST /api/ingest/logs or /metrics
+  Client->>API: POST /api/ingest/logs or /api/ingest/metrics
   API->>Key: Validate key hash and scopes
   Key->>Limit: Keyed by organization and API key id
   Limit->>API: Allow or return 429

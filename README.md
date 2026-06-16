@@ -163,7 +163,7 @@ sequenceDiagram
   participant L as Rate/Quota Limits
   participant DB as MySQL
 
-  C->>API: POST /api/ingest/logs or /metrics
+  C->>API: POST /api/ingest/logs or /api/ingest/metrics
   API->>K: Validate hashed scoped API key
   API->>L: Apply API-key/org rate limits
   API->>API: Validate, redact, and cap accepted rows
@@ -406,14 +406,13 @@ Detailed checklist: [docs/PRODUCTION_READINESS_CHECKLIST.md](docs/PRODUCTION_REA
 - Logs and custom metrics are MySQL-backed; VictoriaMetrics forwarding for custom metrics is future work.
 - Docker build fails locally during container `npm ci`, while npm audit fails locally with certificate verification.
 - Docker Compose is a local/demo deployment model, not a complete production orchestrator.
-- Existing `backend/prisma/seed.js` is left untouched; use `npm run seed` for the Phase 10 demo seed.
+- Existing `backend/prisma/seed.js` is left untouched; use `npm run seed` for the recruiter/demo seed.
 
 ## Roadmap
 
-- Final code quality and README accuracy review.
-- Resume/LinkedIn packaging.
+- Capture demo screenshots or a short walkthrough video.
+- Share the final recruiter package on GitHub, resume, and LinkedIn.
 - Fix local/container CA trust and complete Docker build + audit.
-- Add demo screenshots or short walkthrough video.
 - Add frontend dashboard.
 - Add scheduled telemetry retention worker.
 - Add persistent usage quotas and billing model.
@@ -446,6 +445,8 @@ No frontend screenshots are included yet. Suggested screenshots and demo flow ar
 - [Architecture](docs/ARCHITECTURE.md)
 - [API examples](docs/API_EXAMPLES.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
+- [Final recruiter package](docs/FINAL_RECRUITER_PACKAGE.md)
+- [Final project health report](docs/FINAL_PROJECT_HEALTH_REPORT.md)
 - [Project summary](docs/PROJECT_SUMMARY.md)
 - [Interview notes](docs/INTERVIEW_NOTES.md)
 - [Resume bullets](docs/RESUME_BULLETS.md)
