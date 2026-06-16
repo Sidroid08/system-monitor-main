@@ -15,6 +15,7 @@ model Organization {
   updatedAt            DateTime             @updatedAt
 
   users                User[]
+  members              OrganizationMember[]
   awsAccounts          AwsAccount[]
   monitoredInstances   MonitoredInstance[]
   apiKeys              ApiKey[]
@@ -22,6 +23,7 @@ model Organization {
   alertRules           AlertRule[]
   notificationChannels NotificationChannel[]
   syncLogs             SyncLog[]
+  auditLogs            AuditLog[]
 
   @@map("organizations")
 }
@@ -38,9 +40,30 @@ model User {
   updatedAt      DateTime     @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships    OrganizationMember[]
+  createdApiKeys ApiKey[]     @relation("ApiKeyCreatedBy")
+  auditLogs      AuditLog[]
 
   @@index([organizationId])
   @@map("users")
+}
+
+model OrganizationMember {
+  id             String          @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrgMemberRole   @default(VIEWER)
+  status         OrgMemberStatus @default(ACTIVE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_members")
 }
 
 model AwsAccount {
@@ -98,15 +121,22 @@ model ApiKey {
   id             String    @id @default(uuid())
   organizationId String
   name           String
-  keyHash        String
+  prefix         String?   @unique
+  keyHash        String    @unique
+  scopes         String    @default("[]")
   isActive       Boolean   @default(true)
   expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdByUserId String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser User?        @relation("ApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
+  @@index([createdByUserId])
   @@map("api_keys")
 }
 
@@ -211,12 +241,46 @@ model SyncLog {
   @@map("sync_logs")
 }
 
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  actorUserId    String?
+  action         String
+  resourceType   String
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor       User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([actorUserId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum UserRole {
   ADMIN
   MEMBER
   VIEWER
+}
+
+enum OrgMemberRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  VIEWER
+}
+
+enum OrgMemberStatus {
+  ACTIVE
+  INVITED
+  DISABLED
 }
 
 enum AwsAuthMode {

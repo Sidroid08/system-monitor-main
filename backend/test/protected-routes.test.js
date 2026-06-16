@@ -9,6 +9,7 @@ process.env.JWT_EXPIRES_IN = '1h';
 process.env.DATABASE_URL = 'mysql://user:password@localhost:3306/sidroid_test';
 process.env.VICTORIA_METRICS_URL = 'http://localhost:8428';
 
+const { setAuthContextResolverForTests } = await import('../src/middleware/authenticate.js');
 const { createApp } = await import('../src/app.js');
 
 function request(app, { method = 'GET', path = '/', body, headers = {} } = {}) {
@@ -48,8 +49,20 @@ function makeToken(organizationId) {
     email: 'admin@example.com',
     name: 'Admin',
     organizationId,
-    role: 'ADMIN',
+    role: 'OWNER',
   }, process.env.JWT_SECRET, { expiresIn: '1h' });
+}
+
+function useAuthUser({ organizationId, role = 'OWNER', userId = 'user-1' }) {
+  setAuthContextResolverForTests(async () => ({
+    id: userId,
+    email: 'admin@example.com',
+    name: 'Admin',
+    organizationId,
+    membershipId: 'member-1',
+    role,
+    membershipStatus: 'ACTIVE',
+  }));
 }
 
 test('liveness probe returns 200 without auth', async () => {
@@ -68,6 +81,7 @@ test('protected routes return 401 without token', async () => {
     { method: 'GET',  path: '/api/alert-rules' },
     { method: 'GET',  path: '/api/notification-channels' },
     { method: 'GET',  path: '/api/query/instant?query=up' },
+    { method: 'GET',  path: '/api/api-keys' },
   ];
 
   for (const r of routes) {
@@ -79,6 +93,7 @@ test('protected routes return 401 without token', async () => {
 test('tenant-scoped routes reject mismatched organization ids before data access', async () => {
   const app = createApp();
   const token = makeToken('11111111-1111-4111-8111-111111111111');
+  useAuthUser({ organizationId: '11111111-1111-4111-8111-111111111111' });
   const headers = { authorization: `Bearer ${token}` };
 
   const instances = await request(app, {
@@ -101,6 +116,22 @@ test('tenant-scoped routes reject mismatched organization ids before data access
     },
   });
   assert.equal(aws.status, 403);
+});
+
+test('viewer cannot perform admin mutation', async () => {
+  const app = createApp();
+  const orgId = '11111111-1111-4111-8111-111111111111';
+  useAuthUser({ organizationId: orgId, role: 'VIEWER' });
+  const token = makeToken(orgId);
+
+  const res = await request(app, {
+    method: 'POST',
+    path: '/api/api-keys',
+    headers: { authorization: `Bearer ${token}` },
+    body: { name: 'viewer-key', scopes: ['metrics:write'] },
+  });
+
+  assert.equal(res.status, 403);
 });
 
 test('auth endpoints are reachable without token', async () => {

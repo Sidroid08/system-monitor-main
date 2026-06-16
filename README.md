@@ -167,6 +167,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - AWS EC2 setup: `aws/ec2_setup.md`
 - Phase 0 repository audit: `docs/REPO_AUDIT.md`
 - Phase 1 stabilization notes: `docs/PHASE_1_NOTES.md`
+- Phase 2 auth/RBAC/multitenancy notes: `docs/PHASE_2_NOTES.md`
 - Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
@@ -175,7 +176,7 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 1 is foundation stabilization, security cleanup, and test hygiene only. See the Phase 0 audit, Phase 1 notes, and roadmap before adding workers, ingestion, incidents, status pages, or AI features.
+This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 2 adds the auth, RBAC, organization membership, API-key, audit-log, and tenant-isolation foundation. See the phase notes and roadmap before adding workers, ingestion, incidents, status pages, or AI features.
 
 ---
 

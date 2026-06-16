@@ -1,6 +1,7 @@
 import { ok } from '../../utils/apiResponse.js';
 import { notFound } from '../../utils/errors.js';
 import { dispatchAlertToChannel } from '../../lib/notifier.js';
+import { writeAuditLog } from '../../lib/auditLogger.js';
 import { createChannelSchema, updateChannelSchema } from './notifications.schemas.js';
 import {
   createChannel,
@@ -20,6 +21,14 @@ export async function create(req, res) {
     config: payload.config,
     minSeverity: payload.minSeverity,
   });
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'notification_channel.created',
+    resourceType: 'notification_channel',
+    resourceId: channel.id,
+    metadata: { type: channel.type, minSeverity: channel.minSeverity },
+  });
   return ok(res, { channel }, 'Notification channel created', 201);
 }
 
@@ -38,12 +47,26 @@ export async function update(req, res) {
   const data = updateChannelSchema.parse(req.body);
   const result = await updateChannel(req.params.id, req.user.organizationId, data);
   if (result.count === 0) throw notFound('Notification channel not found');
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'notification_channel.updated',
+    resourceType: 'notification_channel',
+    resourceId: req.params.id,
+  });
   return ok(res, null, 'Notification channel updated');
 }
 
 export async function remove(req, res) {
   const result = await deleteChannel(req.params.id, req.user.organizationId);
   if (result.count === 0) throw notFound('Notification channel not found');
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'notification_channel.deleted',
+    resourceType: 'notification_channel',
+    resourceId: req.params.id,
+  });
   return ok(res, null, 'Notification channel deleted');
 }
 
@@ -64,5 +87,12 @@ export async function test(req, res) {
   };
 
   await dispatchAlertToChannel(channel, fakeAlert, null);
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'notification_channel.tested',
+    resourceType: 'notification_channel',
+    resourceId: req.params.id,
+  });
   return ok(res, null, 'Test notification dispatched');
 }

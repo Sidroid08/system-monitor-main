@@ -20,6 +20,10 @@ const jwtSecret = required('JWT_SECRET', isProduction ? undefined : 'change-me')
 if (isProduction && jwtSecret.length < 32) {
   throw new Error('JWT_SECRET must be at least 32 characters in production');
 }
+const apiKeyPepper = required('API_KEY_PEPPER', isProduction ? undefined : jwtSecret);
+if (isProduction && apiKeyPepper.length < 32) {
+  throw new Error('API_KEY_PEPPER must be at least 32 characters in production');
+}
 const corsOrigin = isProduction ? required('CORS_ORIGIN') : (process.env.CORS_ORIGIN || '*');
 
 // Resolve the path for file_sd target files relative to the project root.
@@ -32,6 +36,7 @@ export const env = {
   port: Number(process.env.PORT ?? 5000),
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? (isProduction ? '15m' : '7d'),
+  apiKeyPepper,
   corsOrigin,
 
   databaseUrl: required('DATABASE_URL'),

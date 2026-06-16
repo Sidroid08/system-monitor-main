@@ -3,18 +3,32 @@ import prisma from '../../lib/prisma.js';
 export async function findUserByEmail(email) {
   return prisma.user.findUnique({
     where: { email },
-    include: { organization: true },
+    include: {
+      organization: true,
+      memberships: {
+        where: { status: 'ACTIVE' },
+        include: { organization: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
   });
 }
 
 export async function findUserById(id) {
   return prisma.user.findUnique({
     where: { id },
-    include: { organization: true },
+    include: {
+      organization: true,
+      memberships: {
+        where: { status: 'ACTIVE' },
+        include: { organization: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
   });
 }
 
-// Creates an Organization and its first ADMIN user in a single transaction.
+// Creates an Organization and its first OWNER membership in a single transaction.
 export async function createOrgAndAdmin({ orgName, name, email, passwordHash }) {
   return prisma.$transaction(async (tx) => {
     const slug = orgName
@@ -34,6 +48,16 @@ export async function createOrgAndAdmin({ orgName, name, email, passwordHash }) 
       include: { organization: true },
     });
 
-    return user;
+    const membership = await tx.organizationMember.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        role: 'OWNER',
+        status: 'ACTIVE',
+      },
+      include: { organization: true },
+    });
+
+    return { ...user, memberships: [membership] };
   });
 }

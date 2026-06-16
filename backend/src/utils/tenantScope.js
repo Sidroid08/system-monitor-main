@@ -1,7 +1,11 @@
 import { forbidden } from './errors.js';
 
+export function getActiveOrgId(user) {
+  return user?.organizationId ?? null;
+}
+
 export function requireOrganizationScope(user, requestedOrganizationId = undefined) {
-  const organizationId = user?.organizationId;
+  const organizationId = getActiveOrgId(user);
   if (!organizationId) {
     throw forbidden('Missing organization scope');
   }

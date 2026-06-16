@@ -50,3 +50,19 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+  await prisma.organizationMember.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: org.id,
+        userId: user.id,
+      },
+    },
+    update: { role: "OWNER", status: "ACTIVE" },
+    create: {
+      organizationId: org.id,
+      userId: user.id,
+      role: "OWNER",
+      status: "ACTIVE",
+    },
+  });

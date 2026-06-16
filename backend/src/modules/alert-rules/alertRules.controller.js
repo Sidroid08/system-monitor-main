@@ -1,11 +1,20 @@
 import { ok } from '../../utils/apiResponse.js';
 import { notFound } from '../../utils/errors.js';
+import { writeAuditLog } from '../../lib/auditLogger.js';
 import { createAlertRuleSchema, updateAlertRuleSchema } from './alertRules.schemas.js';
 import { createRule, listRules, findRule, updateRule, deleteRule } from './alertRules.repository.js';
 
 export async function create(req, res) {
   const data = createAlertRuleSchema.parse(req.body);
   const rule = await createRule({ ...data, organizationId: req.user.organizationId });
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'alert_rule.created',
+    resourceType: 'alert_rule',
+    resourceId: rule.id,
+    metadata: { name: rule.name, severity: rule.severity },
+  });
   return ok(res, { rule }, 'Alert rule created', 201);
 }
 
@@ -26,11 +35,25 @@ export async function update(req, res) {
   const data = updateAlertRuleSchema.parse(req.body);
   const result = await updateRule(req.params.id, req.user.organizationId, data);
   if (result.count === 0) throw notFound('Alert rule not found');
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'alert_rule.updated',
+    resourceType: 'alert_rule',
+    resourceId: req.params.id,
+  });
   return ok(res, null, 'Alert rule updated');
 }
 
 export async function remove(req, res) {
   const result = await deleteRule(req.params.id, req.user.organizationId);
   if (result.count === 0) throw notFound('Alert rule not found');
+  await writeAuditLog({
+    req,
+    organizationId: req.user.organizationId,
+    action: 'alert_rule.deleted',
+    resourceType: 'alert_rule',
+    resourceId: req.params.id,
+  });
   return ok(res, null, 'Alert rule deleted');
 }
