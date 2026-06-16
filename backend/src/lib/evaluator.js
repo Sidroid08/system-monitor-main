@@ -1,7 +1,16 @@
-import cron from 'node-cron';
 import prisma from './prisma.js';
 import { queryInstant } from './vmClient.js';
 import { dispatchAlert } from './notifier.js';
+
+let evaluationIntervalMs = 30_000;
+
+function normalizeIntervalSeconds(intervalSeconds) {
+  const seconds = Number(intervalSeconds ?? 30);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 30;
+  }
+  return Math.max(1, Math.floor(seconds));
+}
 
 // ─── Condition evaluation ─────────────────────────────────────────────────────
 
@@ -62,7 +71,7 @@ async function evaluateRule(rule) {
       } else if (fresh.state === 'PENDING') {
         // Check if we've been pending long enough to fire.
         const pendingCycles = fresh.pendingSince
-          ? Math.floor((now - fresh.pendingSince) / (30_000)) + 1
+          ? Math.floor((now - fresh.pendingSince) / evaluationIntervalMs) + 1
           : 1;
 
         if (pendingCycles >= fresh.forCycles) {
@@ -130,11 +139,13 @@ async function runEvaluationCycle() {
 }
 
 export function startEvaluator(intervalSeconds) {
-  const seconds = intervalSeconds ?? 30;
-  // Build a cron expression for every N seconds (cron only supports 1-59).
-  const expr = seconds < 60 ? `*/${seconds} * * * * *` : `0 */${Math.floor(seconds / 60)} * * * *`;
+  const seconds = normalizeIntervalSeconds(intervalSeconds);
+  evaluationIntervalMs = seconds * 1000;
 
-  cron.schedule(expr, () => {
+  const timer = setInterval(() => {
     runEvaluationCycle().catch(() => {});
-  }, { scheduled: true });
+  }, evaluationIntervalMs);
+
+  timer.unref?.();
+  return timer;
 }

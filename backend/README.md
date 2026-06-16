@@ -1,176 +1,85 @@
-# Sidroid Phase 1 Backend
+# Sidroid Backend
 
-Phase 1 control-plane backend for Sidroid. This backend provides:
+Express/Prisma control-plane backend for the Sidroid monitoring project.
 
-- JWT-based auth
-- organization management
-- AWS account connection storage
-- EC2 sync into MySQL
-- instance inventory APIs
+## Stack
 
-## Folder structure
+- Node.js with ES modules
+- Express 5
+- Prisma 5
+- MySQL
+- JWT and bcrypt authentication
+- Zod request validation
+- VictoriaMetrics query proxy
 
-```text
-sidroid-phase1-backend/
-├── package.json
-├── .env.example
-├── README.md
-├── sql/
-│   └── schema.sql
-├── scripts/
-│   └── manualSync.js
-└── src/
-    ├── app.js
-    ├── server.js
-    ├── config/
-    │   └── env.js
-    ├── db/
-    │   └── pool.js
-    ├── middleware/
-    │   ├── authenticate.js
-    │   └── errorHandler.js
-    ├── modules/
-    │   ├── auth/
-    │   ├── organizations/
-    │   ├── aws/
-    │   └── instances/
-    ├── services/
-    │   └── awsSyncService.js
-    └── utils/
-        ├── apiResponse.js
-        ├── asyncHandler.js
-        └── orgCode.js
+## Setup
+
+1. Copy the example environment file:
+
+```bash
+cp .env.example .env
 ```
 
-## Tech stack
+2. Update local values in `.env`. Do not commit `.env` or real cloud credentials.
 
-- Node.js
-- Express
-- MySQL
-- AWS SDK v3 for JavaScript
-- JWT auth
-
-## Quick start
-
-1. Create a MySQL database and run `sql/schema.sql`.
-2. Copy `.env.example` to `.env` and update values.
-3. Install packages:
+3. Install dependencies:
 
 ```bash
 npm install
 ```
 
-4. Start the server:
+4. Validate Prisma configuration:
+
+```bash
+DATABASE_URL=mysql://sidroid_user:local-dev-password@localhost:3306/sidroid npx prisma validate
+```
+
+5. Start the backend:
 
 ```bash
 npm run dev
 ```
 
-## Environment variables
+## Validation
 
-See `.env.example`.
+```bash
+npm run lint
+npm test
+```
 
-Important ones:
+`npm test` runs only real test files under `test/`. The Prisma connectivity probe is available separately:
 
-- `JWT_SECRET`
-- `DB_HOST`
-- `DB_PORT`
-- `DB_NAME`
-- `DB_USER`
-- `DB_PASSWORD`
-- `AWS_SYNC_DEFAULT_REGION`
+```bash
+npm run db:check
+```
 
-## API routes
+`db:check` requires a reachable database and should not be treated as a unit test.
 
-### Auth
+## Main API routes
 
+- `GET /health`
+- `GET /health/ready`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
-
-### Organizations
-
 - `GET /api/org`
-- `POST /api/org`
-
-### AWS
-
+- `GET /api/org/:id`
 - `GET /api/aws`
-- `POST /api/aws/connect`
-- `POST /api/aws/sync`
-
-### Instances
-
+- `POST /api/aws`
+- `POST /api/aws/:id/sync`
 - `GET /api/instances`
-- `GET /api/instances?orgId=1`
+- `GET /api/alert-rules`
+- `POST /api/alert-rules`
+- `GET /api/notification-channels`
+- `POST /api/notification-channels`
+- `GET /api/query/instant`
+- `GET /api/query/range`
+- `GET /api/query/labels`
 
-## Example request flow
+Most routes require a bearer token. Tenant-owned routes use the authenticated user's `organizationId`.
 
-### 1. Register
+## Security notes
 
-```json
-{
-  "name": "Siddhant",
-  "email": "sid@example.com",
-  "password": "StrongPass123"
-}
-```
-
-### 2. Login
-
-```json
-{
-  "email": "sid@example.com",
-  "password": "StrongPass123"
-}
-```
-
-### 3. Create organization
-
-```json
-{
-  "name": "CompanyA",
-  "description": "First customer org"
-}
-```
-
-### 4. Connect AWS account
-
-```json
-{
-  "organizationId": 1,
-  "accountName": "company-a-prod",
-  "region": "us-east-1",
-  "authType": "access_key",
-  "accessKeyId": "AKIA...",
-  "secretAccessKey": "..."
-}
-```
-
-### 5. Sync EC2 instances
-
-```json
-{
-  "awsAccountId": 1
-}
-```
-
-## AWS tag model expected by the sync
-
-The sync filters for instances tagged with:
-
-- `Monitor=true`
-
-And it reads these tags when present:
-
-- `Name`
-- `Node`
-- `Service`
-- `OrgId`
-- `OrgName`
-
-## Notes
-
-- Phase 1 stores AWS secrets directly in MySQL for development speed. For production, encrypt them or move to a secrets manager.
-- IAM role-based auth is scaffolded in the schema but not fully implemented in the sync service yet.
-- Config generation and Grafana automation are Phase 2/3 work.
+- Never commit `.env`, AWS credential exports, PEM/private keys, or webhook URLs.
+- AWS account responses intentionally omit stored access keys and secret keys.
+- Static AWS keys are still stored by the current development model; production should move to assume-role and/or encrypted secret storage.

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const createAwsAccountSchema = z.object({
-  organizationId: z.string().uuid(),
+  organizationId: z.string().uuid().optional(),
   accountName: z.string().min(1),
   accountId: z.string().optional(),
   region: z.string().min(1),

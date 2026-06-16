@@ -7,6 +7,11 @@ const safeSelect = {
   // Expose a separate GET /api/notification-channels/:id/config endpoint if needed.
 };
 
+const deliverySelect = {
+  ...safeSelect,
+  config: true,
+};
+
 export async function createChannel({ organizationId, name, type, config, minSeverity }) {
   return prisma.notificationChannel.create({
     data: { organizationId, name, type, config: JSON.stringify(config), minSeverity },
@@ -24,6 +29,10 @@ export async function listChannels(organizationId) {
 
 export async function findChannel(id, organizationId) {
   return prisma.notificationChannel.findFirst({ where: { id, organizationId }, select: safeSelect });
+}
+
+export async function findChannelForDelivery(id, organizationId) {
+  return prisma.notificationChannel.findFirst({ where: { id, organizationId }, select: deliverySelect });
 }
 
 export async function updateChannel(id, organizationId, data) {

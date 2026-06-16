@@ -124,6 +124,23 @@ function severityGte(alertSeverity, minSeverity) {
   return SEVERITY_ORDER.indexOf(alertSeverity) >= SEVERITY_ORDER.indexOf(minSeverity);
 }
 
+async function deliverToChannel(channel, alert, rule) {
+  if (!severityGte(alert.severity, channel.minSeverity)) return;
+
+  let config;
+  try {
+    config = JSON.parse(channel.config);
+  } catch {
+    return;
+  }
+
+  switch (channel.type) {
+    case 'EMAIL':   return sendEmail(config, alert, rule);
+    case 'SLACK':   return sendSlack(config, alert, rule);
+    case 'WEBHOOK': return sendWebhook(config, alert, rule);
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 // Called by the evaluator after a new Alert is created.
@@ -135,20 +152,12 @@ export async function dispatchAlert(alert, rule) {
 
   await Promise.allSettled(
     channels
-      .filter((ch) => severityGte(alert.severity, ch.minSeverity))
-      .map(async (channel) => {
-        let config;
-        try {
-          config = JSON.parse(channel.config);
-        } catch {
-          return;
-        }
-
-        switch (channel.type) {
-          case 'EMAIL':   return sendEmail(config, alert, rule);
-          case 'SLACK':   return sendSlack(config, alert, rule);
-          case 'WEBHOOK': return sendWebhook(config, alert, rule);
-        }
-      }),
+      .filter((ch) => ch.isActive)
+      .map((channel) => deliverToChannel(channel, alert, rule)),
   );
+}
+
+export async function dispatchAlertToChannel(channel, alert, rule) {
+  if (!channel?.isActive) return;
+  await deliverToChannel(channel, alert, rule);
 }

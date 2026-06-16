@@ -1,8 +1,15 @@
 import { ok } from '../../utils/apiResponse.js';
 import { notFound } from '../../utils/errors.js';
-import { dispatchAlert } from '../../lib/notifier.js';
+import { dispatchAlertToChannel } from '../../lib/notifier.js';
 import { createChannelSchema, updateChannelSchema } from './notifications.schemas.js';
-import { createChannel, listChannels, findChannel, updateChannel, deleteChannel } from './notifications.repository.js';
+import {
+  createChannel,
+  listChannels,
+  findChannel,
+  findChannelForDelivery,
+  updateChannel,
+  deleteChannel,
+} from './notifications.repository.js';
 
 export async function create(req, res) {
   const payload = createChannelSchema.parse(req.body);
@@ -42,7 +49,7 @@ export async function remove(req, res) {
 
 // POST /api/notification-channels/:id/test — send a test alert to verify config.
 export async function test(req, res) {
-  const channel = await findChannel(req.params.id, req.user.organizationId);
+  const channel = await findChannelForDelivery(req.params.id, req.user.organizationId);
   if (!channel) throw notFound('Notification channel not found');
 
   const fakeAlert = {
@@ -56,6 +63,6 @@ export async function test(req, res) {
     labels: null,
   };
 
-  await dispatchAlert(fakeAlert, null);
+  await dispatchAlertToChannel(channel, fakeAlert, null);
   return ok(res, null, 'Test notification dispatched');
 }

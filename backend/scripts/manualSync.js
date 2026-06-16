@@ -1,9 +1,9 @@
 import dotenv from 'dotenv';
-import { syncAwsAccountInstances } from '../src/services/awsSyncService.js';
+import { syncAwsAccountInstances } from '../src/modules/aws/aws.sync.js';
 
 dotenv.config();
 
-const awsAccountId = Number(process.argv[2]);
+const awsAccountId = process.argv[2];
 if (!awsAccountId) {
   console.error('Usage: npm run sync -- <awsAccountId>');
   process.exit(1);

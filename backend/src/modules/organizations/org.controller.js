@@ -1,54 +1,30 @@
-import { createOrganizationSchema } from './org.schemas.js';
-import {
-  createOrganization,
-  getOrganizations,
-  getOrganizationById,
-} from './org.repository.js';
+import { conflict, notFound } from '../../utils/errors.js';
+import { getOrganizationById } from './org.repository.js';
 
-export async function createOrg(req, res, next) {
-  try {
-    const payload = createOrganizationSchema.parse(req.body);
-    const organization = await createOrganization(payload);
-
-    return res.status(201).json({
-      success: true,
-      data: organization,
-    });
-  } catch (error) {
-    next(error);
-  }
+export async function createOrg() {
+  throw conflict('Organizations are created during registration');
 }
 
-export async function listOrgs(req, res, next) {
-  try {
-    const organizations = await getOrganizations();
+export async function listOrgs(req, res) {
+  const organization = await getOrganizationById(req.user.organizationId);
+  if (!organization) throw notFound('Organization not found');
 
-    return res.status(200).json({
-      success: true,
-      data: organizations,
-    });
-  } catch (error) {
-    next(error);
-  }
+  return res.status(200).json({
+    success: true,
+    data: [organization],
+  });
 }
 
-export async function getOrgById(req, res, next) {
-  try {
-    const { id } = req.params;
-    const organization = await getOrganizationById(id);
-
-    if (!organization) {
-      return res.status(404).json({
-        success: false,
-        message: 'Organization not found',
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      data: organization,
-    });
-  } catch (error) {
-    next(error);
+export async function getOrgById(req, res) {
+  if (req.params.id !== req.user.organizationId) {
+    throw notFound('Organization not found');
   }
+
+  const organization = await getOrganizationById(req.user.organizationId);
+  if (!organization) throw notFound('Organization not found');
+
+  return res.status(200).json({
+    success: true,
+    data: organization,
+  });
 }

@@ -5,7 +5,9 @@ export function notFoundHandler(req, res) {
 }
 
 export function errorHandler(err, req, res, next) {
-  console.error(err);
+  if (process.env.NODE_ENV !== 'test') {
+    console.error(err);
+  }
 
   if (err instanceof ZodError) {
     return res.status(400).json({

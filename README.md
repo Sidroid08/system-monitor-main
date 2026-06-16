@@ -166,6 +166,8 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 - Troubleshooting: `docs/troubleshooting.md`
 - AWS EC2 setup: `aws/ec2_setup.md`
 - Phase 0 repository audit: `docs/REPO_AUDIT.md`
+- Phase 1 stabilization notes: `docs/PHASE_1_NOTES.md`
+- Security notes: `docs/SECURITY_NOTES.md`
 - Production roadmap: `docs/PRODUCTION_ROADMAP.md`
 - Target SaaS architecture: `docs/TARGET_ARCHITECTURE.md`
 
@@ -173,7 +175,27 @@ Use the included `send_metrics.sh` only when a push workflow is required.
 
 ## SaaS upgrade status
 
-This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 0 is documentation and project hygiene only. See the Phase 0 audit and roadmap before adding auth, workers, ingestion, incidents, status pages, or AI features.
+This repository is being evolved from a monitoring stack plus early backend control plane into a multi-tenant observability SaaS. Phase 1 is foundation stabilization, security cleanup, and test hygiene only. See the Phase 0 audit, Phase 1 notes, and roadmap before adding workers, ingestion, incidents, status pages, or AI features.
+
+---
+
+## Backend validation
+
+From `backend/`:
+
+```bash
+npm run lint
+npm test
+$env:DATABASE_URL="mysql://sidroid_user:local-dev-password@localhost:3306/sidroid"; npx prisma validate
+```
+
+From `docker/`:
+
+```bash
+docker compose config
+```
+
+Keep `.env`, `docker/.env`, AWS credential CSV exports, PEM/private keys, logs, and local tool state out of Git. Use `.env.example` files for placeholders only.
 
 ---
 

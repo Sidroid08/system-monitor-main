@@ -1,6 +1,6 @@
 import prisma from '../../lib/prisma.js';
 
-export function toSafeAwsAccount(account) {
+function toSafeAwsAccount(account) {
   if (!account) return null;
   return {
     id: account.id,
@@ -21,10 +21,11 @@ export function toSafeAwsAccount(account) {
 }
 
 export async function createAwsAccount(data) {
-  return prisma.awsAccount.create({
+  const account = await prisma.awsAccount.create({
     data,
     include: { organization: { select: { id: true, name: true, slug: true } } },
   });
+  return toSafeAwsAccount(account);
 }
 
 export async function getAwsAccountsByOrganization({ organizationId, limit = 50, offset = 0 } = {}) {
@@ -36,7 +37,7 @@ export async function getAwsAccountsByOrganization({ organizationId, limit = 50,
     prisma.awsAccount.count({ where }),
   ]);
 
-  return { accounts, total };
+  return { accounts: accounts.map(toSafeAwsAccount), total };
 }
 
 export async function findAwsAccountById(id) {
