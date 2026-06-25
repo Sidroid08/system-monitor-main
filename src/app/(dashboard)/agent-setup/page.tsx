@@ -132,7 +132,7 @@ sudo systemctl status node_exporter`} />
               Step 1 — Download windows_exporter MSI
             </h2>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.6 }}>
-              This installs <strong>windows_exporter v0.29.2</strong> as a Windows service on port <code style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', padding: '1px 5px', borderRadius: 4 }}>:9182</code>.
+              This installs <strong>windows_exporter v0.29.2</strong> as a Windows service on port <code style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', padding: '1px 5px', borderRadius: 4 }}>:9200</code>.
             </p>
             <CodeBlock id="win-install" code={`# Run in PowerShell (Administrator)
 $url = "https://github.com/prometheus-community/windows_exporter/releases/download/v0.29.2/windows_exporter-0.29.2-amd64.msi"
@@ -143,7 +143,7 @@ Invoke-WebRequest -Uri $url -OutFile $dest
 Start-Process msiexec.exe -Wait -ArgumentList \`
   '/I', $dest, \`
   'ENABLED_COLLECTORS=cpu,memory,logical_disk,net,os,system,process', \`
-  'LISTEN_PORT=9182', \`
+  'LISTEN_PORT=9200', \`
   '/quiet'`} />
           </div>
 
@@ -151,9 +151,9 @@ Start-Process msiexec.exe -Wait -ArgumentList \`
             <h2 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>
               Step 2 — Allow firewall (optional, local only)
             </h2>
-            <CodeBlock id="win-firewall" code={`# Allow inbound traffic on port 9182 (run as Administrator)
-New-NetFirewallRule -DisplayName "Windows Exporter" \`
-  -Direction Inbound -Protocol TCP -LocalPort 9182 -Action Allow`} />
+            <CodeBlock id="win-firewall" code={`# Allow inbound traffic on port 9200 (run as Administrator)
+New-NetFirewallRule -DisplayName "Allow Prometheus Metrics" \`
+  -Direction Inbound -Protocol TCP -LocalPort 9200 -Action Allow`} />
           </div>
 
           <div className="glass-card" style={{ padding: '22px' }}>
@@ -161,7 +161,7 @@ New-NetFirewallRule -DisplayName "Windows Exporter" \`
               Step 3 — Verify
             </h2>
             <CodeBlock id="win-verify" code={`# In PowerShell
-Invoke-WebRequest http://localhost:9182/metrics | Select-Object -First 20 -ExpandProperty Content
+Invoke-WebRequest http://localhost:9200/metrics | Select-Object -First 20 -ExpandProperty Content
 
 # Expected output includes:
 # windows_cpu_time_total{core="0",mode="idle"} 1234.56`} />
@@ -182,7 +182,7 @@ Invoke-WebRequest http://localhost:9182/metrics | Select-Object -First 20 -Expan
           {[
             ['Instance Name', 'e.g. my-laptop or prod-server'],
             ['IP Address', 'Your machine\'s IP (use `ip addr` or `ipconfig`)'],
-            ['Port', platform === 'linux' ? '9100 (node_exporter)' : '9182 (windows_exporter)'],
+            ['Port', platform === 'linux' ? '9100 (node_exporter)' : '9200 (windows_exporter)'],
             ['Platform', platform === 'linux' ? 'Linux' : 'Windows'],
           ].map(([k, v]) => (
             <div key={k} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--glass-border)' }}>

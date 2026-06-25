@@ -69,4 +69,4 @@ scrape_configs:
   - job_name: 'sidroid-dynamic-instances'
     scrape_interval: 15s
     http_sd_configs:
-      - url: 'http://cloud-ventur-backend:5000/api/instances/sd-targets'
+      - url: 'http://backend:5000/api/instances/sd-targets'

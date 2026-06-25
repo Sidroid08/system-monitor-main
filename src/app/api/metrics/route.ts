@@ -9,9 +9,10 @@ const BACKEND_API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_
 const VICTORIA_METRICS_URL = process.env.INTERNAL_VICTORIA_METRICS_URL || process.env.NEXT_PUBLIC_VICTORIA_METRICS_URL || 'http://localhost:8428';
 
 // ─── Platform-aware PromQL builders ────────────────────────────────────────
-export function buildPromQL(metric: string, instance: string, platform: 'LINUX' | 'WINDOWS'): string {
+export function buildPromQL(metric: string, instance: string, platform: 'LINUX' | 'WINDOWS', exporterPort?: number | string): string {
   const win = platform === 'WINDOWS';
-  const port = win ? '9200' : '9100';
+  // Use the actual registered exporter port, fallback to defaults
+  const port = exporterPort ?? (win ? 9200 : 9100);
   const addr = `${instance}:${port}`;
 
   switch (metric) {
@@ -28,7 +29,7 @@ export function buildPromQL(metric: string, instance: string, platform: 'LINUX' 
 
     case 'disk':
       return win
-        ? `100 - ((windows_logical_disk_free_bytes{instance="${addr}",volume!="HarddiskVolume*"} / windows_logical_disk_size_bytes{instance="${addr}",volume!="HarddiskVolume*"}) * 100)`
+        ? `100 - ((windows_logical_disk_free_bytes{instance="${addr}",volume!~"HarddiskVolume.*"} / windows_logical_disk_size_bytes{instance="${addr}",volume!~"HarddiskVolume.*"}) * 100)`
         : `100 - ((node_filesystem_avail_bytes{instance="${addr}",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{instance="${addr}",mountpoint="/",fstype!="tmpfs"}) * 100)`;
 
     case 'network_in':
@@ -70,19 +71,20 @@ export async function GET(request: NextRequest) {
   }
 
   const searchParams = request.nextUrl.searchParams;
-  const rawQuery  = searchParams.get('query');
-  const metric    = searchParams.get('metric');        // named metric shortcut
-  const instance  = searchParams.get('instance');     // IP of the target
-  const platform  = (searchParams.get('platform') || 'LINUX') as 'LINUX' | 'WINDOWS';
-  const start     = searchParams.get('start');
-  const end       = searchParams.get('end');
-  const step      = searchParams.get('step') || '60s';
-  const instant   = searchParams.get('instant') === 'true'; // instant vs range
+  const rawQuery      = searchParams.get('query');
+  const metric        = searchParams.get('metric');        // named metric shortcut
+  const instance      = searchParams.get('instance');     // IP of the target
+  const platform      = (searchParams.get('platform') || 'LINUX') as 'LINUX' | 'WINDOWS';
+  const exporterPort  = searchParams.get('exporterPort');  // actual port the exporter is on
+  const start         = searchParams.get('start');
+  const end           = searchParams.get('end');
+  const step          = searchParams.get('step') || '60s';
+  const instant       = searchParams.get('instant') === 'true'; // instant vs range
 
   // Build the final PromQL
   let query = rawQuery;
   if (metric && instance) {
-    query = buildPromQL(metric, instance, platform);
+    query = buildPromQL(metric, instance, platform, exporterPort ?? undefined);
   }
 
   if (!query || !start || !end) {

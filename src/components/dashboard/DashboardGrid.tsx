@@ -11,6 +11,7 @@ interface DashboardGridProps {
   selectedInstanceIp?: string;
   platform?: 'LINUX' | 'WINDOWS';
   refreshInterval?: number; // ms, default 30000
+  exporterPort?: number;
 }
 
 
@@ -31,12 +32,14 @@ export default function DashboardGrid({
   selectedInstanceIp,
   platform = 'LINUX',
   refreshInterval = 30000,
+  exporterPort,
 }: DashboardGridProps) {
   const { cpu, memory, disk, networkIn } = useInstanceMetrics(
     selectedInstanceIp,
     platform,
     !!selectedInstanceIp,
-    refreshInterval
+    refreshInterval,
+    exporterPort
   );
 
   const cpuVal    = cpu.current;
@@ -115,7 +118,7 @@ export default function DashboardGrid({
         <span className="status-dot status-dot-active" />
         <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
           Monitoring <code style={{ color: 'var(--accent)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
-            {selectedInstanceIp}:{platform === 'WINDOWS' ? '9200' : '9100'}
+            {selectedInstanceIp}:{exporterPort ?? (platform === 'WINDOWS' ? 9182 : 9100)}
           </code>
           &nbsp;·&nbsp;
           {platform === 'LINUX' ? 'node_exporter' : 'windows_exporter'}

@@ -18,7 +18,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["node", "jest", "@testing-library/jest-dom"],
+    "types": ["node"],
     "incremental": true,
     "allowJs": true,
     "noEmit": true,

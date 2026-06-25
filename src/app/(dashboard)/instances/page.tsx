@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api/client';
+import { useToast } from '@/context/ToastContext';
 import InstancesList from '@/components/dashboard/InstancesList';
 
 const STATUS_FILTERS = ['ALL', 'RUNNING', 'STOPPED', 'TERMINATED'];
@@ -16,17 +15,28 @@ const emptyForm = {
 };
 
 export default function InstancesPage() {
-  const { user } = useAuth();
-  const router = useRouter();
+  const { user, token } = useAuth();
+  const { addToast } = useToast();
   const [filter, setFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // Ref to trigger a refetch inside InstancesList
+  const refetchRef = useRef<(() => void) | null>(null);
+
   const set = (k: keyof typeof emptyForm) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(p => ({ ...p, [k]: e.target.value }));
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const value = e.target.value;
+      setForm(p => {
+        const next = { ...p, [k]: value };
+        if (k === 'platform') {
+          next.port = value === 'WINDOWS' ? '9200' : '9100';
+        }
+        return next;
+      });
+    };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +46,7 @@ export default function InstancesPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.token || localStorage.getItem('auth_token') || ''}`,
+          'Authorization': `Bearer ${token || localStorage.getItem('auth_token') || ''}`,
         },
         body: JSON.stringify({
           organizationId: user?.organizationId,
@@ -47,7 +57,7 @@ export default function InstancesPage() {
           platform: form.platform,
           serviceType: form.serviceType,
           status: 'RUNNING',
-          exporterPort: parseInt(form.port || (form.platform === 'WINDOWS' ? '9182' : '9100'), 10),
+          exporterPort: parseInt(form.port || (form.platform === 'WINDOWS' ? '9200' : '9100'), 10),
         }),
       });
 
@@ -55,15 +65,33 @@ export default function InstancesPage() {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to register instance');
       }
+
+      // Close modal and reset form
       setShowModal(false);
       setForm(emptyForm);
-      router.refresh();
+
+      // Show success toast
+      addToast({
+        title: '✅ Instance Registered',
+        description: `${form.instanceName} has been added and is now being monitored.`,
+        type: 'success',
+      });
+
+      // Trigger re-fetch in InstancesList
+      refetchRef.current?.();
+
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to register instance');
+      setError(err?.message || 'Failed to register instance');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const handleCloseModal = useCallback(() => {
+    setShowModal(false);
+    setForm(emptyForm);
+    setError('');
+  }, []);
 
   return (
     <div className="page-enter" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -106,12 +134,16 @@ export default function InstancesPage() {
         ))}
       </div>
 
-      {/* Instances list */}
-      <InstancesList organizationId={user?.organizationId} />
+      {/* Instances list — pass refetch binder & submitting flag */}
+      <InstancesList
+        organizationId={user?.organizationId}
+        onBindRefetch={(fn) => { refetchRef.current = fn; }}
+        pendingRegistration={submitting}
+      />
 
       {/* Register modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseModal}>
           <div className="modal-box animate-scale-in" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div style={{ marginBottom: 20 }}>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
@@ -178,17 +210,22 @@ export default function InstancesPage() {
                   Exporter Port
                 </label>
                 <input className="input-glass" value={form.port} onChange={set('port')}
-                  placeholder={form.platform === 'LINUX' ? '9100 (node_exporter)' : '9182 (windows_exporter)'} />
+                  placeholder={form.platform === 'LINUX' ? '9100 (node_exporter)' : '9200 (windows_exporter)'} />
                 <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                  Linux: 9100 · Windows: 9182
+                  Linux: 9100 · Windows: 9200
                 </p>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                <button type="submit" disabled={submitting} className="btn-primary" style={{ flex: 1 }}>
-                  {submitting ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Registering…</> : '✓ Register Instance'}
+                <button type="submit" disabled={submitting} className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  {submitting ? (
+                    <>
+                      <span className="spinner" style={{ width: 14, height: 14 }} />
+                      Registering…
+                    </>
+                  ) : '✓ Register Instance'}
                 </button>
-                <button type="button" onClick={() => setShowModal(false)} className="btn-ghost">Cancel</button>
+                <button type="button" onClick={handleCloseModal} className="btn-ghost">Cancel</button>
               </div>
             </form>
           </div>

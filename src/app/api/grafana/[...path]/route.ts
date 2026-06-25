@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-
 const GRAFANA_URL = process.env.INTERNAL_GRAFANA_URL || 'http://grafana:3000';
-const JWT_SECRET = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
 
 export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
   return handleProxy(request, params.path);

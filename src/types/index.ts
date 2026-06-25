@@ -21,6 +21,7 @@ export interface MonitoredInstance {
   status: 'RUNNING' | 'STOPPED' | 'TERMINATED' | 'UNKNOWN';
   orgLabel?: string;
   serviceLabel?: string;
+  exporterPort?: number;
   lastSeenAt?: string;
   createdAt: string;
   updatedAt: string;

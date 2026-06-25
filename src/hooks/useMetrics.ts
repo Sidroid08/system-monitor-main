@@ -14,6 +14,7 @@ interface UseMetricOptions {
   stepSeconds?: number;   // default 60
   enabled?: boolean;
   refreshInterval?: number; // ms — default 30000
+  exporterPort?: number;
 }
 
 interface UseMetricResult {
@@ -33,6 +34,7 @@ export function useMetric({
   stepSeconds = 60,
   enabled = true,
   refreshInterval = 30000,
+  exporterPort,
 }: UseMetricOptions): UseMetricResult {
   const { token } = useAuth();
   const [data, setData]         = useState<MetricPoint[]>([]);
@@ -58,6 +60,7 @@ export function useMetric({
       step:  `${stepSeconds}s`,
       platform,
       ...(instance ? { instance } : {}),
+      ...(exporterPort ? { exporterPort: exporterPort.toString() } : {}),
     });
 
     try {
@@ -89,7 +92,7 @@ export function useMetric({
     } finally {
       setLoading(false);
     }
-  }, [metric, instance, platform, rangeMinutes, stepSeconds, token, enabled]);
+  }, [metric, instance, platform, rangeMinutes, stepSeconds, token, enabled, exporterPort]);
 
   // Initial fetch
   useEffect(() => { fetch(); }, [fetch]);
@@ -117,8 +120,9 @@ export function useInstanceMetrics(
   platform: Platform = 'LINUX',
   enabled = true,
   refreshInterval = 30000,
+  exporterPort?: number
 ): UseInstanceMetricsResult {
-  const opts = { instance, platform, enabled, refreshInterval };
+  const opts = { instance, platform, enabled, refreshInterval, exporterPort };
   return {
     cpu:       useMetric({ metric: 'cpu',        ...opts }),
     memory:    useMetric({ metric: 'memory',     ...opts }),

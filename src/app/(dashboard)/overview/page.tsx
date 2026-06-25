@@ -48,12 +48,23 @@ export default function OverviewPage() {
           if (detected?.detected && detected.instance) {
             setDetectedLocal(detected.instance);
             setSelected(detected.instance);
+            // Persist so Grafana page picks up the same target
+            localStorage.setItem('sidroid-selected-instance', JSON.stringify(detected.instance));
             return;
           }
         } catch {}
 
-        // Default: select first
+        // Default: restore last selection or fall back to first
+        const stored = localStorage.getItem('sidroid-selected-instance');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            const match = list.find(i => i.id === parsed.id);
+            if (match) { setSelected(match); return; }
+          } catch {}
+        }
         if (list.length > 0) setSelected(list[0]);
+        if (list.length > 0) localStorage.setItem('sidroid-selected-instance', JSON.stringify(list[0]));
       } catch (err) {
         console.warn('[Overview] Failed to load instances', err);
       } finally {
@@ -68,7 +79,7 @@ export default function OverviewPage() {
   const ip       = selected?.privateIp || selected?.publicIp;
   const platform = (selected?.platform || 'LINUX') as 'LINUX' | 'WINDOWS';
   const refreshMs = refreshInterval * 1000;
-  const { cpu, memory, disk, networkIn } = useInstanceMetrics(ip, platform, !!ip, refreshMs);
+  const { cpu, memory, disk, networkIn } = useInstanceMetrics(ip, platform, !!ip, refreshMs, selected?.exporterPort);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -114,7 +125,7 @@ export default function OverviewPage() {
             {greeting()}, <span className="gradient-text">{user?.name?.split(' ')[0]}</span> 👋
           </h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Organization: <strong style={{ color: 'var(--text-secondary)' }}>{user?.organizationId?.slice(0, 8)}…</strong>
+            Organization: <strong style={{ color: 'var(--text-secondary)' }}>{user?.organizationId}</strong>
             &nbsp;·&nbsp;
             {instances.length} instance{instances.length !== 1 ? 's' : ''} registered
           </p>
@@ -130,13 +141,17 @@ export default function OverviewPage() {
                 value={selected?.id || ''}
                 onChange={e => {
                   const inst = instances.find(i => i.id === e.target.value);
-                  if (inst) setSelected(inst);
+                  if (inst) {
+                    setSelected(inst);
+                    // Keep Grafana page in sync
+                    localStorage.setItem('sidroid-selected-instance', JSON.stringify(inst));
+                  }
                 }}
                 className="input-glass"
                 style={{ fontSize: '0.82rem', minWidth: 200, padding: '7px 12px' }}
               >
                 {instances.map(inst => (
-                  <option key={inst.id} value={inst.id}>
+                  <option key={inst.id} value={inst.id} style={{ background: '#0f172a', color: '#f1f5f9' }}>
                     {inst.instanceName || inst.instanceId} · {inst.publicIp || inst.privateIp || 'No IP'} ({inst.platform})
                   </option>
                 ))}
@@ -237,6 +252,7 @@ export default function OverviewPage() {
           selectedInstanceIp={ip}
           platform={platform}
           refreshInterval={refreshMs}
+          exporterPort={selected?.exporterPort}
         />
       )}
     </div>

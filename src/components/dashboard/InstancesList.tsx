@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { MonitoredInstance } from '@/types';
 import ConfirmModal from '@/components/ConfirmModal';
 import { getThresholds, setThresholds, AlertThresholds } from '@/hooks/useAlertChecker';
@@ -10,6 +10,10 @@ interface InstancesListProps {
   organizationId?: string;
   instances?: MonitoredInstance[];
   onInstanceUpdated?: () => void;
+  /** Called once on mount so the parent can trigger a refetch */
+  onBindRefetch?: (fn: () => void) => void;
+  /** When true, shows a skeleton row at the top to signal a registration in flight */
+  pendingRegistration?: boolean;
 }
 
 const statusConfig: Record<string, { dot: string; badge: string; label: string }> = {
@@ -26,7 +30,7 @@ function formatRepeatInterval(seconds?: number): string {
   return `${Math.floor(s / 3600)}h`;
 }
 
-export default function InstancesList({ organizationId, instances: propsInstances, onInstanceUpdated }: InstancesListProps) {
+export default function InstancesList({ organizationId, instances: propsInstances, onInstanceUpdated, onBindRefetch, pendingRegistration }: InstancesListProps) {
   const { addToast } = useToast();
   const [internalInstances, setInternalInstances] = useState<MonitoredInstance[]>([]);
   const [alertRules, setAlertRules] = useState<any[]>([]);
@@ -53,7 +57,7 @@ export default function InstancesList({ organizationId, instances: propsInstance
 
   const instances = propsInstances || internalInstances;
 
-  const fetchInstancesAndRules = () => {
+  const fetchInstancesAndRules = useCallback(() => {
     if (!organizationId && !propsInstances) return;
     const token = localStorage.getItem('auth_token') || '';
     
@@ -73,7 +77,12 @@ export default function InstancesList({ organizationId, instances: propsInstance
     })
     .catch(() => {})
     .finally(() => setLoading(false));
-  };
+  }, [organizationId, propsInstances]);
+
+  // Expose refetch to parent via onBindRefetch
+  useEffect(() => {
+    if (onBindRefetch) onBindRefetch(fetchInstancesAndRules);
+  }, [onBindRefetch, fetchInstancesAndRules]);
 
   useEffect(() => {
     if (!propsInstances || alertRules.length === 0) fetchInstancesAndRules();
@@ -260,6 +269,16 @@ export default function InstancesList({ organizationId, instances: propsInstance
                 </tr>
               </thead>
               <tbody>
+                {/* Skeleton row shown while a new instance is being registered */}
+                {pendingRegistration && (
+                  <tr style={{ borderBottom: '1px solid var(--glass-border)', opacity: 0.7 }}>
+                    {[...Array(6)].map((_, i) => (
+                      <td key={i} style={{ padding: '12px 16px' }}>
+                        <div className="skeleton" style={{ height: 16, width: i === 0 ? 120 : i === 4 ? 60 : 80, borderRadius: 6 }} />
+                      </td>
+                    ))}
+                  </tr>
+                )}
                 {instances.map(inst => {
                   const st = statusConfig[inst.status] || statusConfig.UNKNOWN;
                   const isActionLoading = actionLoading?.startsWith(inst.id);
@@ -275,6 +294,12 @@ export default function InstancesList({ organizationId, instances: propsInstance
                       >
                         <td style={{ padding: '12px 16px' }}>
                           <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{inst.instanceName || inst.instanceId}</div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center' }}>
+                            <code style={{ fontSize: '0.6rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono, monospace' }}>
+                              Inst: {inst.id}
+                            </code>
+                          </div>
+                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2, fontFamily: 'JetBrains Mono, monospace' }}>Org: {inst.organizationId}</div>
                         </td>
                         <td style={{ padding: '12px 16px' }}>
                           <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace' }}>{inst.publicIp || inst.privateIp || '—'}</code>
@@ -292,19 +317,22 @@ export default function InstancesList({ organizationId, instances: propsInstance
                             {instRules.length} Rules {isExpanded ? '▲' : '▼'}
                           </button>
                         </td>
-                        <td style={{ padding: '12px 16px', display: 'flex', gap: 6 }}>
+                        <td style={{ padding: '12px 16px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <a href={`/grafana?instanceId=${inst.id}`} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem', textDecoration: 'none' }} title="View Dedicated Grafana Dashboard">
+                            📊 Dashboard
+                          </a>
                           <button onClick={() => openWebAlerts(inst)} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem' }} title="Web UI Alerts (Local)">
-                            🔔
+                            🔔 Alerts
                           </button>
                           <button onClick={() => openEmailAlerts(inst)} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem' }} title="Email Alerts (DB)">
-                            📧
+                            📧 Emails
                           </button>
                           {inst.status === 'STOPPED' ? (
                             <button onClick={() => handleAction(inst.id, 'start')} disabled={isActionLoading} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem', color: 'var(--success)' }}>▶️ Start</button>
                           ) : (
                             <button onClick={() => handleAction(inst.id, 'stop')} disabled={isActionLoading} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem', color: 'var(--warning)' }}>⏸️ Stop</button>
                           )}
-                          <button onClick={() => handleAction(inst.id, 'terminate')} disabled={isActionLoading} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem', color: 'var(--danger)' }} title="Terminate (Delete forever)">🗑️</button>
+                          <button onClick={() => handleAction(inst.id, 'terminate')} disabled={isActionLoading} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.7rem', color: 'var(--danger)' }} title="Terminate (Delete forever)">🗑️ Delete</button>
                         </td>
                       </tr>
                       {isExpanded && instRules.length > 0 && (
