@@ -9,3 +9,4 @@ router.delete('/:id', authenticate, asyncHandler(deleteAlertRule));
 router.patch('/:id/pause', authenticate, asyncHandler(pauseAlertRule));
 router.patch('/:id/resume', authenticate, asyncHandler(resumeAlertRule));
 export default router;
+//updating git
