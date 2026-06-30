@@ -1,7 +1,6 @@
 import { ok } from '../../utils/apiResponse.js';
 import { listInstances, upsertInstance } from './instances.repository.js';
 import prisma from '../../lib/prisma.js';
-import { provisionInstanceDashboard, removeInstanceDashboard } from './dashboard.service.js';
 
 export async function getInstances(req, res) {
   const organizationId = req.query.orgId || req.user?.organizationId || null;
@@ -34,9 +33,6 @@ export async function createInstance(req, res) {
     lastSeenAt:   new Date(),
   });
 
-  // Provision dedicated Grafana dashboard for this instance asynchronously
-  provisionInstanceDashboard(instance).catch(err => console.error('[Dashboard] Async provision failed:', err));
-
   return res.status(201).json({ success: true, data: instance });
 }
 
@@ -66,10 +62,7 @@ export async function deleteInstance(req, res) {
     await prisma.alertRule.delete({ where: { id: rule.id } });
   }
 
-  // 2. Remove dedicated Grafana dashboard
-  await removeInstanceDashboard(id);
-
-  // 3. Delete the instance itself
+  // 2. Delete the instance itself
   await prisma.monitoredInstance.delete({ where: { id } });
   return ok(res, null, 'Instance permanently deleted');
 }

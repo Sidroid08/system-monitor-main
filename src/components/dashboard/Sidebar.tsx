@@ -13,6 +13,7 @@ const navGroups = [
     items: [
       { href: '/overview',      label: 'Overview',      icon: '📊' },
       { href: '/instances',     label: 'Instances',     icon: '🖥️' },
+      { href: '/services',      label: 'Services',      icon: '⚙️' },
       { href: '/alerts',        label: 'Alerts',        icon: '🚨' },
       { href: '/grafana',       label: 'Grafana',       icon: '📈' },
     ],

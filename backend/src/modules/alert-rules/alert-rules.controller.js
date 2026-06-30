@@ -3,12 +3,9 @@ import prisma from '../../lib/prisma.js';
 import axios from 'axios';
 import { clearCooldown } from '../../workers/alertEvaluator.js';
 
-const GRAFANA_URL = process.env.INTERNAL_GRAFANA_URL || 'http://grafana:3000';
+const GRAFANA_URL = process.env.INTERNAL_GRAFANA_URL || 'http://cloud-ventur-grafana:3000';
 const GRAFANA_AUTH = Buffer.from('admin:admin123').toString('base64');
-const GRAFANA_FOLDER_NAME = 'Sidroid Monitoring';
-
-// In-memory cache for the folder UID (reset on process restart)
-let _cachedFolderUid = null;
+const GRAFANA_FOLDER_UID = 'cfn8991l3iqyod'; // "Sidroid Monitoring" folder
 
 const grafana = axios.create({
   baseURL: GRAFANA_URL,
@@ -21,50 +18,6 @@ const grafana = axios.create({
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/**
- * Ensure the Grafana "Sidroid Monitoring" folder exists.
- * - Looks it up by name from the folder list.
- * - Creates it if missing.
- * - Caches the UID in memory to avoid repeated API calls.
- * - Set forceRefresh=true to bust the cache (e.g. after a delete).
- */
-async function ensureGrafanaFolder(forceRefresh = false) {
-  if (_cachedFolderUid && !forceRefresh) return _cachedFolderUid;
-
-  try {
-    // List all folders (paginate if needed, default limit is 1000)
-    const { data: folders } = await grafana.get('/api/folders?limit=1000');
-    const existing = folders.find(f => f.title === GRAFANA_FOLDER_NAME);
-
-    if (existing) {
-      _cachedFolderUid = existing.uid;
-      console.log(`[Grafana] Using existing folder "${GRAFANA_FOLDER_NAME}" (UID: ${_cachedFolderUid})`);
-      return _cachedFolderUid;
-    }
-  } catch (e) {
-    console.warn('[Grafana] Could not list folders, will attempt to create:', e.message);
-  }
-
-  // Folder not found – create it
-  try {
-    const { data: created } = await grafana.post('/api/folders', { title: GRAFANA_FOLDER_NAME });
-    _cachedFolderUid = created.uid;
-    console.log(`[Grafana] Created folder "${GRAFANA_FOLDER_NAME}" (UID: ${_cachedFolderUid})`);
-    return _cachedFolderUid;
-  } catch (e) {
-    // If it raced with another request and already exists, retry the lookup once
-    if (e.response?.status === 409) {
-      const { data: folders } = await grafana.get('/api/folders?limit=1000');
-      const existing = folders.find(f => f.title === GRAFANA_FOLDER_NAME);
-      if (existing) {
-        _cachedFolderUid = existing.uid;
-        return _cachedFolderUid;
-      }
-    }
-    throw new Error(`Failed to create Grafana folder "${GRAFANA_FOLDER_NAME}": ${e?.response?.data?.message || e.message}`);
-  }
-}
 
 async function resolveInstanceIp(dbInstanceId) {
   if (!dbInstanceId || dbInstanceId === 'ALL') return null;
@@ -265,15 +218,6 @@ async function provisionGrafanaRule(rule) {
   const expr = buildPromQL(metric, instanceIp);
   if (!expr) throw new Error(`Unknown metric: ${metric}`);
 
-  // Auto-create folder if it doesn't exist; if it fails once, bust cache and retry
-  let folderUID;
-  try {
-    folderUID = await ensureGrafanaFolder();
-  } catch (e) {
-    console.warn('[Grafana] Folder lookup failed, retrying with cache bust:', e.message);
-    folderUID = await ensureGrafanaFolder(true);
-  }
-
   const grafanaContactUid = await createGrafanaContactPoint(emailList, id);
 
   const metricLabel = { cpu: 'CPU Usage', memory: 'Memory Usage', disk: 'Disk Usage' }[metric] || metric;
@@ -281,7 +225,7 @@ async function provisionGrafanaRule(rule) {
 
   const grafanaPayload = {
     title: `Sidroid_${metric.toUpperCase()}_${id.substring(0, 8)}`,
-    folderUID,
+    folderUID: GRAFANA_FOLDER_UID,
     ruleGroup: 'SidroidRules',
     condition: 'C',
     data: [
