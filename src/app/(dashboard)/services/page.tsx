@@ -278,6 +278,7 @@ export default function ServicesPage() {
   const [servicesData, setServicesData] = useState<ServicesData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hostAgentError, setHostAgentError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const [search, setSearch] = useState('');
@@ -318,40 +319,46 @@ export default function ServicesPage() {
 
     setLoading(true);
     setError(null);
+    setHostAgentError(null);
     try {
       const auth = token || localStorage.getItem('auth_token') || '';
       
-      // Fetch both endpoints in parallel
-      const [servicesRes, processesRes] = await Promise.all([
+      // Fetch both endpoints in parallel — processes failure is non-fatal
+      const [servicesRes, processesResult] = await Promise.all([
         fetch(`/api/services?instance=${ip}&exporterPort=${port}`, { headers: { Authorization: `Bearer ${auth}` } }),
-        // Only fetch processes if it's a Windows machine for now, since our backend logic uses PowerShell Get-Process
-        selected.platform === 'WINDOWS' 
-          ? fetch(`/api/processes`, { headers: { Authorization: `Bearer ${auth}` } })
+        selected.platform === 'WINDOWS'
+          ? fetch(`/api/processes`, { headers: { Authorization: `Bearer ${auth}` } }).catch(() => null)
           : Promise.resolve(null)
       ]);
 
       const servicesJson = await servicesRes.json();
       if (!servicesJson.success) throw new Error(servicesJson.message || 'Failed to fetch services');
       
-      let processesJson = null;
-      if (processesRes && processesRes.ok) {
-        processesJson = await processesRes.json();
-      }
-
-      // Merge the data
+      // Merge the data from services
       const mergedData = { ...servicesJson.data };
       
-      if (processesJson && processesJson.success && processesJson.data?.processes) {
-        // Add processes to the services list
-        mergedData.services = [
-          ...(mergedData.services || []),
-          ...processesJson.data.processes
-        ];
-        
-        // Update summary
-        const procCount = processesJson.data.processes.length;
-        mergedData.summary.total += procCount;
-        mergedData.summary.running += procCount; // All fetched processes are running
+      // Handle processes response — gracefully degrade if host agent is down
+      if (processesResult) {
+        if (processesResult.ok) {
+          const processesJson = await processesResult.json();
+          if (processesJson.success && processesJson.data?.processes) {
+            mergedData.services = [
+              ...(mergedData.services || []),
+              ...processesJson.data.processes,
+            ];
+            const procCount = processesJson.data.processes.length;
+            mergedData.summary.total += procCount;
+            mergedData.summary.running += procCount;
+          }
+        } else {
+          // Host agent offline — show warning but still display Windows services
+          let errMsg = 'Host agent (port 9201) is not running.';
+          try {
+            const errJson = await processesResult.json();
+            if (errJson.message) errMsg = errJson.message;
+          } catch {}
+          setHostAgentError(errMsg);
+        }
       }
 
       setServicesData(mergedData);
@@ -499,6 +506,20 @@ export default function ServicesPage() {
         </div>
       )}
 
+      {/* ── Host Agent offline warning ─────────────────────────────────────────── */}
+      {hostAgentError && selected?.platform === 'WINDOWS' && (
+        <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(243,156,18,0.08)', border: '1px solid rgba(243,156,18,0.30)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔌</span>
+          <div>
+            <p style={{ fontSize: '0.83rem', color: 'var(--warning)', fontWeight: 600, marginBottom: 3 }}>Host Agent Offline — Apps (Processes) unavailable</p>
+            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+              Windows services are still showing below. To see running apps like Antigravity IDE, Docker, Chrome etc., start the host agent:{' '}
+              <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: 4 }}>node host-agent.js</code>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Error state ───────────────────────────────────────────────────────── */}
       {error && (
         <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(255,78,106,0.08)', border: '1px solid rgba(255,78,106,0.25)' }}>
@@ -591,22 +612,33 @@ export default function ServicesPage() {
             <div style={{ width: '1px', height: 24, background: 'var(--glass-border)', margin: '0 4px' }} />
 
             {/* Type filter pills */}
-            {(['ALL', 'SERVICE', 'PROCESS'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setTypeFilter(f)}
-                style={{
-                  padding: '5px 14px', borderRadius: 20, fontSize: '0.76rem', fontWeight: 500,
-                  cursor: 'pointer', border: '1px solid',
-                  background: typeFilter === f ? 'var(--accent-subtle)' : 'var(--glass-bg)',
-                  borderColor: typeFilter === f ? 'var(--accent-border)' : 'var(--glass-border)',
-                  color: typeFilter === f ? 'var(--accent)' : 'var(--text-secondary)',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {f === 'ALL' ? 'All Types' : f === 'SERVICE' ? '⚙️ Services' : '💻 Apps'}
-              </button>
-            ))}
+            {(['ALL', 'SERVICE', 'PROCESS'] as const).map(f => {
+              const isApps = f === 'PROCESS';
+              const appsOffline = isApps && !!hostAgentError;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setTypeFilter(f)}
+                  title={appsOffline ? 'Start host-agent.js to see running apps' : undefined}
+                  style={{
+                    padding: '5px 14px', borderRadius: 20, fontSize: '0.76rem', fontWeight: 500,
+                    cursor: 'pointer', border: '1px solid',
+                    background: typeFilter === f
+                      ? (appsOffline ? 'rgba(243,156,18,0.12)' : 'var(--accent-subtle)')
+                      : 'var(--glass-bg)',
+                    borderColor: typeFilter === f
+                      ? (appsOffline ? 'rgba(243,156,18,0.40)' : 'var(--accent-border)')
+                      : 'var(--glass-border)',
+                    color: typeFilter === f
+                      ? (appsOffline ? 'var(--warning)' : 'var(--accent)')
+                      : 'var(--text-secondary)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {f === 'ALL' ? 'All Types' : f === 'SERVICE' ? '⚙️ Services' : appsOffline ? '💻 Apps ⚠️' : '💻 Apps'}
+                </button>
+              );
+            })}
 
             <select
               className="input-glass"
@@ -659,8 +691,22 @@ export default function ServicesPage() {
                 <tbody>
                   {displayedServices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        🔍 No services match your filters
+                      <td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center' }}>
+                        {typeFilter === 'PROCESS' && hostAgentError ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: '2rem' }}>🔌</span>
+                            <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--warning)' }}>Host Agent is not running</p>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', maxWidth: 420 }}>
+                              Apps like Antigravity IDE, Docker, Chrome, etc. are fetched via the host agent.
+                              Start it by running this command in your project folder:
+                            </p>
+                            <code style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.82rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-border)', padding: '6px 14px', borderRadius: 8, color: 'var(--accent)' }}>
+                              node host-agent.js
+                            </code>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>🔍 No services match your filters</span>
+                        )}
                       </td>
                     </tr>
                   ) : displayedServices.slice(0, visibleCount).map(svc => {
